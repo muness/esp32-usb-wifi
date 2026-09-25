@@ -25,403 +25,362 @@ static RTC_NOINIT_ATTR uint32_t mode_magic;
 static RTC_NOINIT_ATTR uint32_t mode_next;
 static uint64_t now_ms(void) { return esp_timer_get_time() / 1000; }
 void setup_reboot(bool enter) {
-  mode_magic = 0x54444d31;
-  mode_next = enter ? 1 : 2;
-  esp_restart();
+    mode_magic = 0x54444d31;
+    mode_next = enter ? 1 : 2;
+    esp_restart();
 }
 bool setup_requested(void) {
-  uint32_t mode = 0;
-  if (esp_reset_reason() == ESP_RST_SW && mode_magic == 0x54444d31)
-    mode = mode_next;
-  mode_magic = 0;
-  mode_next = 0;
-  settings_t s;
-  settings_load(&s);
-  return mode == 1 ||
-         (mode != 2 && policy_next(&s, 0) < 0 && settings_store_ok());
+    uint32_t mode = 0;
+    if (esp_reset_reason() == ESP_RST_SW && mode_magic == 0x54444d31)
+        mode = mode_next;
+    mode_magic = 0;
+    mode_next = 0;
+    settings_t s;
+    settings_load(&s);
+    return mode == 1 || (mode != 2 && policy_next(&s, 0) < 0 && settings_store_ok());
 }
 void app_snapshot(app_snapshot_t *s) {
-  portENTER_CRITICAL(&lock);
-  *s = public;
-  portEXIT_CRITICAL(&lock);
+    portENTER_CRITICAL(&lock);
+    *s = public;
+    portEXIT_CRITICAL(&lock);
 }
 void app_event(unsigned code, unsigned detail) {
-  portENTER_CRITICAL(&lock);
-  public.events[public.event_count++ % 24] = (event_t){now_ms(), code, detail};
-  portEXIT_CRITICAL(&lock);
+    portENTER_CRITICAL(&lock);
+    public.events[public.event_count++ % 24] = (event_t){now_ms(), code, detail};
+    portEXIT_CRITICAL(&lock);
 }
 void app_ui_stack(uint32_t n) {
-  portENTER_CRITICAL(&lock);
-  public.ui_stack = n;
-  portEXIT_CRITICAL(&lock);
+    portENTER_CRITICAL(&lock);
+    public.ui_stack = n;
+    portEXIT_CRITICAL(&lock);
 }
 static void error(const char *s) {
-  portENTER_CRITICAL(&lock);
-  snprintf(public.error, sizeof(public.error), "%s", s);
-  portEXIT_CRITICAL(&lock);
-  app_event(9, 0);
+    portENTER_CRITICAL(&lock);
+    snprintf(public.error, sizeof(public.error), "%s", s);
+    portEXIT_CRITICAL(&lock);
+    app_event(9, 0);
 }
 static void publish(void) {
-  settings_t safe = cfg;
-  for (int i = 0; i < PROFILE_MAX; i++)
-    memset(safe.p[i].pass, 0, sizeof(safe.p[i].pass));
-  if (trial) {
-    safe.p[trial_slot] = candidate;
-    memset(safe.p[trial_slot].pass, 0, sizeof(safe.p[trial_slot].pass));
-  }
-  uint32_t free_heap = esp_get_free_heap_size(),
-           min_heap = esp_get_minimum_free_heap_size();
-  uint32_t dma_heap = heap_caps_get_free_size(MALLOC_CAP_DMA),
-           stack = uxTaskGetStackHighWaterMark(NULL);
-  portENTER_CRITICAL(&lock);
-  public.cfg = safe;
-  public.active = active;
-  public.setup = in_setup;
-  public.trial = trial;
-  public.free_heap = free_heap;
-  public.min_heap = min_heap;
-  public.dma_heap = dma_heap;
-  public.control_stack = stack;
-  portEXIT_CRITICAL(&lock);
+    settings_t safe = cfg;
+    for (int i = 0; i < PROFILE_MAX; i++)
+        memset(safe.p[i].pass, 0, sizeof(safe.p[i].pass));
+    if (trial) {
+        safe.p[trial_slot] = candidate;
+        memset(safe.p[trial_slot].pass, 0, sizeof(safe.p[trial_slot].pass));
+    }
+    uint32_t free_heap = esp_get_free_heap_size(), min_heap = esp_get_minimum_free_heap_size();
+    uint32_t dma_heap = heap_caps_get_free_size(MALLOC_CAP_DMA),
+             stack = uxTaskGetStackHighWaterMark(NULL);
+    portENTER_CRITICAL(&lock);
+    public.cfg = safe;
+    public.active = active;
+    public.setup = in_setup;
+    public.trial = trial;
+    public.free_heap = free_heap;
+    public.min_heap = min_heap;
+    public.dma_heap = dma_heap;
+    public.control_stack = stack;
+    portEXIT_CRITICAL(&lock);
 }
 bool control_submit(const char *line) {
-  if (!commands || strlen(line) >= 512)
-    return false;
-  char b[512] = {0};
-  memcpy(b, line, strlen(line));
-  return xQueueSend(commands, b, 0) == pdTRUE;
+    if (!commands || strlen(line) >= 512)
+        return false;
+    char b[512] = {0};
+    memcpy(b, line, strlen(line));
+    return xQueueSend(commands, b, 0) == pdTRUE;
 }
 static bool persist(void) {
-  if (now_ms() - last_write < 2000) {
-    error("Wait 2 seconds between saves");
-    return false;
-  }
-  esp_err_t e = settings_save(&cfg);
-  if (e != ESP_OK) {
-    error("Storage save failed");
-    return false;
-  }
-  last_write = now_ms();
-  return true;
+    if (now_ms() - last_write < 2000) {
+        error("Wait 2 seconds between saves");
+        return false;
+    }
+    esp_err_t e = settings_save(&cfg);
+    if (e != ESP_OK) {
+        error("Storage save failed");
+        return false;
+    }
+    last_write = now_ms();
+    return true;
 }
 static void join(int slot) {
-  active = slot;
-  stable_at = 0;
-  attempt_at = now_ms();
-  if (slot >= 0) {
-    const profile_t *p = trial ? &candidate : &cfg.p[slot];
-    esp_err_t e = wifi_apply_creds(p->ssid, p->pass);
-    if (e != ESP_OK)
-      error("Join start failed; retry pending");
-  } else
-    wifi_apply_creds("", "");
+    active = slot;
+    stable_at = 0;
+    attempt_at = now_ms();
+    if (slot >= 0) {
+        const profile_t *p = trial ? &candidate : &cfg.p[slot];
+        esp_err_t e = wifi_apply_creds(p->ssid, p->pass);
+        if (e != ESP_OK)
+            error("Join start failed; retry pending");
+    } else
+        wifi_apply_creds("", "");
 }
 static void status(void) {
-  bridge_snapshot_t b;
-  bridge_snapshot(&b);
-  app_snapshot_t a;
-  app_snapshot(&a);
-  bridge_crash_info_t c;
-  bridge_get_crash(&c);
-  console_printf("mode=%s trial=%d active=%d wifi=%s rssi=%d usb_enumerated=%d "
-                 "usb_transport_ready=%d host_interface_ready=unknown "
-                 "internet=not_checked\r\n",
-                 in_setup ? "setup" : "adapter", trial, active + 1,
-                 bridge_link_status(), b.rssi, b.usb_mounted, b.usb_ready);
-  uint8_t ip[16];
-  if (bridge_host_ipv4(ip))
-    console_printf("observed_ipv4=%u.%u.%u.%u age_ms=%" PRIu64
-                   " (not DHCP proof)\r\n",
-                   ip[0], ip[1], ip[2], ip[3], b.now_ms - b.addresses.seen4);
-  else
-    mgmt_write("observed_ipv4=unknown_or_expired\r\n");
-  if (bridge_host_ipv6(ip))
-    console_printf(
-        "observed_ipv6=%x:%x:%x:%x:%x:%x:%x:%x age_ms=%" PRIu64 "\r\n",
-        ip[0] * 256 + ip[1], ip[2] * 256 + ip[3], ip[4] * 256 + ip[5],
-        ip[6] * 256 + ip[7], ip[8] * 256 + ip[9], ip[10] * 256 + ip[11],
-        ip[12] * 256 + ip[13], ip[14] * 256 + ip[15],
-        b.now_ms - b.addresses.seen6);
-  console_printf("download_bytes=%" PRIu64 " upload_bytes=%" PRIu64
-                 " down_frames=%" PRIu32 " up_frames=%" PRIu32
-                 " drops_rx=%" PRIu32 " drops_tx=%" PRIu32 " poolfail=%" PRIu32
-                 " reflected=%" PRIu32 " malformed=%" PRIu32 "\r\n",
-                 b.stats.down_bytes, b.stats.up_bytes, b.stats.wifi_to_host,
-                 b.stats.host_to_wifi, b.stats.rxdrop, b.stats.txdrop,
-                 b.stats.poolfail, b.stats.reflected, b.stats.malformed);
-  console_printf(
-      "uptime_ms=%" PRIu64 " association_since_ms=%" PRIu64
-      " join_attempts=%" PRIu32 " disconnect_reason=%u usb_events=%" PRIu32
-      " heap=%" PRIu32 " min_heap=%" PRIu32 " dma=%" PRIu32
-      " control_stack=%" PRIu32 " ui_stack=%" PRIu32 "\r\n",
-      b.now_ms, b.connected_ms, b.reconnects, b.last_reason, b.usb_resets,
-      a.free_heap, a.min_heap, a.dma_heap, a.control_stack, a.ui_stack);
-  console_printf("boots=%" PRIu32 " watchdogs=%" PRIu32 " panics=%" PRIu32
-                 " reset=%d error=%s\r\n",
-                 c.boots, c.hangs, c.faults, esp_reset_reason(), a.error);
-  for (unsigned k = a.event_count > 24 ? a.event_count - 24 : 0;
-       k < a.event_count; k++) {
-    event_t *e = &a.events[k % 24];
-    console_printf("event ms=%" PRIu64 " code=%u detail=%u\r\n", e->ms, e->code,
-                   e->detail);
-  }
-}
-static bool integer(const cJSON *o, const char *key, int min, int max,
-                    int *out) {
-  const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
-  if (!cJSON_IsNumber(v) || v->valuedouble != v->valueint ||
-      v->valueint < min || v->valueint > max)
-    return false;
-  *out = v->valueint;
-  return true;
-}
-static bool string(const cJSON *o, const char *key, char *out, size_t cap) {
-  const cJSON *v = cJSON_GetObjectItemCaseSensitive(o, key);
-  if (!cJSON_IsString(v) || strlen(v->valuestring) >= cap)
-    return false;
-  strcpy(out, v->valuestring);
-  return true;
+    bridge_snapshot_t b;
+    bridge_snapshot(&b);
+    app_snapshot_t a;
+    app_snapshot(&a);
+    bridge_crash_info_t c;
+    bridge_get_crash(&c);
+    console_printf("mode=%s trial=%d active=%d wifi=%s rssi=%d usb_enumerated=%d "
+                   "usb_transport_ready=%d host_interface_ready=unknown "
+                   "internet=not_checked\r\n",
+                   in_setup ? "setup" : "adapter", trial, active + 1, bridge_link_status(), b.rssi,
+                   b.usb_mounted, b.usb_ready);
+    uint8_t ip[16];
+    if (bridge_host_ipv4(ip))
+        console_printf("observed_ipv4=%u.%u.%u.%u age_ms=%" PRIu64 " (not DHCP proof)\r\n", ip[0],
+                       ip[1], ip[2], ip[3], b.now_ms - b.addresses.seen4);
+    else
+        mgmt_write("observed_ipv4=unknown_or_expired\r\n");
+    if (bridge_host_ipv6(ip))
+        console_printf("observed_ipv6=%x:%x:%x:%x:%x:%x:%x:%x age_ms=%" PRIu64 "\r\n",
+                       ip[0] * 256 + ip[1], ip[2] * 256 + ip[3], ip[4] * 256 + ip[5],
+                       ip[6] * 256 + ip[7], ip[8] * 256 + ip[9], ip[10] * 256 + ip[11],
+                       ip[12] * 256 + ip[13], ip[14] * 256 + ip[15], b.now_ms - b.addresses.seen6);
+    console_printf("download_bytes=%" PRIu64 " upload_bytes=%" PRIu64 " down_frames=%" PRIu32
+                   " up_frames=%" PRIu32 " drops_rx=%" PRIu32 " drops_tx=%" PRIu32
+                   " poolfail=%" PRIu32 " reflected=%" PRIu32 " malformed=%" PRIu32 "\r\n",
+                   b.stats.down_bytes, b.stats.up_bytes, b.stats.wifi_to_host, b.stats.host_to_wifi,
+                   b.stats.rxdrop, b.stats.txdrop, b.stats.poolfail, b.stats.reflected,
+                   b.stats.malformed);
+    console_printf("uptime_ms=%" PRIu64 " association_since_ms=%" PRIu64 " join_attempts=%" PRIu32
+                   " disconnect_reason=%u usb_events=%" PRIu32 " heap=%" PRIu32 " min_heap=%" PRIu32
+                   " dma=%" PRIu32 " control_stack=%" PRIu32 " ui_stack=%" PRIu32 "\r\n",
+                   b.now_ms, b.connected_ms, b.reconnects, b.last_reason, b.usb_resets, a.free_heap,
+                   a.min_heap, a.dma_heap, a.control_stack, a.ui_stack);
+    console_printf("boots=%" PRIu32 " watchdogs=%" PRIu32 " panics=%" PRIu32
+                   " reset=%d error=%s\r\n",
+                   c.boots, c.hangs, c.faults, esp_reset_reason(), a.error);
+    for (unsigned k = a.event_count > 24 ? a.event_count - 24 : 0; k < a.event_count; k++) {
+        event_t *e = &a.events[k % 24];
+        console_printf("event ms=%" PRIu64 " code=%u detail=%u\r\n", e->ms, e->code, e->detail);
+    }
 }
 static bool stage_json(const char *json) {
-  if (strstr(json, "\\u")) {
-    error("Unicode escapes unsupported");
-    return false;
-  }
-  const char *end;
-  cJSON *o = cJSON_ParseWithOpts(json, &end, true);
-  profile_t p = {0};
-  int slot, priority;
-  bool ok = o && integer(o, "slot", 1, 8, &slot) &&
-            integer(o, "priority", 0, 100, &priority) &&
-            string(o, "name", p.name, sizeof(p.name)) &&
-            string(o, "ssid", p.ssid, sizeof(p.ssid)) &&
-            string(o, "password", p.pass, sizeof(p.pass));
-  if (ok) {
-    p.priority = priority;
-    ok = profile_valid(&p);
-  }
-  cJSON_Delete(o);
-  if (!ok) {
-    error("Invalid profile fields");
-    return false;
-  }
-  if (settings_stage(slot - 1, &p) != ESP_OK) {
-    error("Cannot stage profile");
-    return false;
-  }
-  mgmt_write("OK candidate saved; rebooting for 45s trial. Previous profile "
-             "retained.\r\n");
-  vTaskDelay(pdMS_TO_TICKS(200));
-  setup_reboot(false);
-  return true;
+    profile_t p;
+    int slot;
+    bool ok = profile_parse_json(json, &slot, &p);
+    if (!ok) {
+        error("Invalid profile fields");
+        return false;
+    }
+    if (settings_stage(slot, &p) != ESP_OK) {
+        error("Cannot stage profile");
+        return false;
+    }
+    mgmt_write("OK candidate saved; rebooting for 45s trial. Previous profile "
+               "retained.\r\n");
+    vTaskDelay(pdMS_TO_TICKS(200));
+    setup_reboot(false);
+    return true;
 }
 static bool index_arg(const char *s, int *i) {
-  char *end;
-  long n = strtol(s, &end, 10);
-  if (!*s || *end || n < 1 || n > 8)
-    return false;
-  *i = n - 1;
-  return true;
+    char *end;
+    long n = strtol(s, &end, 10);
+    if (!*s || *end || n < 1 || n > 8)
+        return false;
+    *i = n - 1;
+    return true;
 }
 static void handle(char *line) {
-  int i;
-  if (!strcmp(line, "help"))
-    mgmt_write("Commands: status, list, scan, use N, del N, profile "
-               "{\"slot\":1,\"name\":\"Home\",\"ssid\":\"SSID\","
-               "\"password\":\"password\",\"priority\":50}, display "
-               "BRIGHTNESS ROTATION DIM_SECONDS, setup, cancel, reset, "
-               "confirm-reset, reboot. Profiles validate by association "
-               "before replacing saved data. No console echo.\r\n");
-  else if (!strcmp(line, "status") || !strcmp(line, "show") ||
-           !strcmp(line, "diagnostics"))
-    status();
-  else if (!strcmp(line, "list")) {
-    for (i = 0; i < 8; i++)
-      if (cfg.p[i].ssid[0])
-        console_printf("%d%s name=%s ssid=%s priority=%u\r\n", i + 1,
-                       i == active ? "*" : "", cfg.p[i].name, cfg.p[i].ssid,
-                       cfg.p[i].priority);
-  } else if (!strcmp(line, "scan")) {
-    if (in_setup || trial) {
-      mgmt_write("ERR scan unavailable in setup/trial\r\n");
-      return;
-    }
-    wifi_scan_config_t sc = {.show_hidden = false};
-    esp_err_t e = esp_wifi_scan_start(&sc, true);
-    if (e != ESP_OK) {
-      mgmt_write("ERR scan busy; retry when association settles\r\n");
-      return;
-    }
-    wifi_ap_record_t *aps = calloc(20, sizeof(*aps));
-    uint16_t n = 20;
-    if (aps && esp_wifi_scan_get_ap_records(&n, aps) == ESP_OK)
-      for (i = 0; i < n; i++)
-        console_printf("ssid=%.32s rssi=%d auth=%d\r\n", aps[i].ssid,
-                       aps[i].rssi, aps[i].authmode);
+    int i;
+    if (!strcmp(line, "help"))
+        mgmt_write("Commands: status, list, scan, use N, del N, profile "
+                   "{\"slot\":1,\"name\":\"Home\",\"ssid\":\"SSID\","
+                   "\"password\":\"password\",\"priority\":50}, display "
+                   "BRIGHTNESS ROTATION DIM_SECONDS, setup, cancel, reset, "
+                   "confirm-reset, reboot. Profiles validate by association "
+                   "before replacing saved data. No console echo.\r\n");
+    else if (!strcmp(line, "status") || !strcmp(line, "show") || !strcmp(line, "diagnostics"))
+        status();
+    else if (!strcmp(line, "list")) {
+        for (i = 0; i < 8; i++)
+            if (cfg.p[i].ssid[0])
+                console_printf("%d%s name=%s ssid=%s priority=%u\r\n", i + 1,
+                               i == active ? "*" : "", cfg.p[i].name, cfg.p[i].ssid,
+                               cfg.p[i].priority);
+    } else if (!strcmp(line, "scan")) {
+        if (in_setup || trial) {
+            mgmt_write("ERR scan unavailable in setup/trial\r\n");
+            return;
+        }
+        wifi_scan_config_t sc = {.show_hidden = false};
+        esp_err_t e = esp_wifi_scan_start(&sc, true);
+        if (e != ESP_OK) {
+            mgmt_write("ERR scan busy; retry when association settles\r\n");
+            return;
+        }
+        wifi_ap_record_t *aps = calloc(20, sizeof(*aps));
+        uint16_t n = 20;
+        if (aps && esp_wifi_scan_get_ap_records(&n, aps) == ESP_OK)
+            for (i = 0; i < n; i++)
+                console_printf("ssid=%.32s rssi=%d auth=%d\r\n", aps[i].ssid, aps[i].rssi,
+                               aps[i].authmode);
+        else
+            esp_wifi_clear_ap_list();
+        free(aps);
+    } else if (!strncmp(line, "profile ", 8)) {
+        if (trial) {
+            mgmt_write("ERR trial in progress\r\n");
+            return;
+        }
+        if (!stage_json(line + 8))
+            mgmt_write("ERR invalid profile or storage failure\r\n");
+    } else if (!strncmp(line, "use ", 4) && index_arg(line + 4, &i) && cfg.p[i].ssid[0]) {
+        if (in_setup || trial) {
+            mgmt_write("ERR cancel setup/trial first\r\n");
+            return;
+        }
+        settings_t old = cfg;
+        cfg.preferred = i;
+        if (persist()) {
+            tried = 0;
+            failures = 0;
+            join(i);
+        } else
+            cfg = old;
+    } else if (!strncmp(line, "del ", 4) && index_arg(line + 4, &i)) {
+        if (trial) {
+            mgmt_write("ERR trial in progress\r\n");
+            return;
+        }
+        settings_t old = cfg;
+        memset(&cfg.p[i], 0, sizeof(profile_t));
+        if (persist()) {
+            if (i == active && !in_setup)
+                join(policy_next(&cfg, 0));
+        } else
+            cfg = old;
+    } else if (!strncmp(line, "display ", 8)) {
+        unsigned brightness, rotation, dim;
+        char extra;
+        if (sscanf(line + 8, "%u %u %u %c", &brightness, &rotation, &dim, &extra) != 3 ||
+            brightness < 5 || brightness > 100 || rotation > 1 || dim < 10 || dim > 3600) {
+            mgmt_write("ERR display: brightness 5..100 rotation 0|1 dim 10..3600 "
+                       "seconds\r\n");
+            return;
+        }
+        settings_t old = cfg;
+        cfg.brightness = brightness;
+        cfg.rotation = rotation;
+        cfg.dim_seconds = dim;
+        if (!persist())
+            cfg = old;
+    } else if (!strcmp(line, "setup")) {
+        if (!trial)
+            setup_reboot(true);
+    } else if (!strcmp(line, "cancel")) {
+        setup_reboot(false);
+    } else if (!strcmp(line, "reset")) {
+        reset_until = now_ms() + 10000;
+        mgmt_write("Confirm within 10 seconds: confirm-reset\r\n");
+    } else if (!strcmp(line, "confirm-reset")) {
+        if (reset_until && now_ms() < reset_until) {
+            reset_until = 0;
+            if (settings_reset() == ESP_OK)
+                setup_reboot(true);
+            else
+                error("Reset storage failed");
+        } else
+            mgmt_write("ERR reset confirmation expired\r\n");
+    } else if (!strcmp(line, "reboot"))
+        esp_restart();
     else
-      esp_wifi_clear_ap_list();
-    free(aps);
-  } else if (!strncmp(line, "profile ", 8)) {
-    if (trial) {
-      mgmt_write("ERR trial in progress\r\n");
-      return;
-    }
-    if (!stage_json(line + 8))
-      mgmt_write("ERR invalid profile or storage failure\r\n");
-  } else if (!strncmp(line, "use ", 4) && index_arg(line + 4, &i) &&
-             cfg.p[i].ssid[0]) {
-    if (in_setup || trial) {
-      mgmt_write("ERR cancel setup/trial first\r\n");
-      return;
-    }
-    settings_t old = cfg;
-    cfg.preferred = i;
-    if (persist()) {
-      tried = 0;
-      failures = 0;
-      join(i);
-    } else
-      cfg = old;
-  } else if (!strncmp(line, "del ", 4) && index_arg(line + 4, &i)) {
-    if (trial) {
-      mgmt_write("ERR trial in progress\r\n");
-      return;
-    }
-    settings_t old = cfg;
-    memset(&cfg.p[i], 0, sizeof(profile_t));
-    if (persist()) {
-      if (i == active && !in_setup)
-        join(policy_next(&cfg, 0));
-    } else
-      cfg = old;
-  } else if (!strncmp(line, "display ", 8)) {
-    unsigned brightness, rotation, dim;
-    char extra;
-    if (sscanf(line + 8, "%u %u %u %c", &brightness, &rotation, &dim, &extra) !=
-            3 ||
-        brightness < 5 || brightness > 100 || rotation > 1 || dim < 10 ||
-        dim > 3600) {
-      mgmt_write("ERR display: brightness 5..100 rotation 0|1 dim 10..3600 "
-                 "seconds\r\n");
-      return;
-    }
-    settings_t old = cfg;
-    cfg.brightness = brightness;
-    cfg.rotation = rotation;
-    cfg.dim_seconds = dim;
-    if (!persist())
-      cfg = old;
-  } else if (!strcmp(line, "setup")) {
-    if (!trial)
-      setup_reboot(true);
-  } else if (!strcmp(line, "cancel")) {
-    setup_reboot(false);
-  } else if (!strcmp(line, "reset")) {
-    reset_until = now_ms() + 10000;
-    mgmt_write("Confirm within 10 seconds: confirm-reset\r\n");
-  } else if (!strcmp(line, "confirm-reset")) {
-    if (reset_until && now_ms() < reset_until) {
-      reset_until = 0;
-      if (settings_reset() == ESP_OK)
-        setup_reboot(true);
-      else
-        error("Reset storage failed");
-    } else
-      mgmt_write("ERR reset confirmation expired\r\n");
-  } else if (!strcmp(line, "reboot"))
-    esp_restart();
-  else
-    mgmt_write("ERR unknown/invalid command; help\r\n");
+        mgmt_write("ERR unknown/invalid command; help\r\n");
 }
 static void task(void *arg) {
-  esp_task_wdt_add(NULL);
-  settings_load(&cfg);
-  if (!settings_store_ok())
-    error("Config damaged: explicit reset needed");
-  if (in_setup) {
-    char ssid[25], pass[17];
-    portal_identity(ssid, pass);
-    portENTER_CRITICAL(&lock);
-    strcpy(public.ap_ssid, ssid);
-    strcpy(public.ap_pass, pass);
-    public.setup_deadline = now_ms() + 600000;
-    portEXIT_CRITICAL(&lock);
-    portal_start();
-  } else if (settings_take_candidate(&trial_slot, &candidate)) {
-    trial = true;
-    trial_at = now_ms();
-    join(trial_slot);
-  } else
-    join(policy_next(&cfg, 0));
-  char line[512];
-  for (;;) {
-    esp_task_wdt_reset();
-    publish();
-    if (xQueueReceive(commands, line, pdMS_TO_TICKS(100)) == pdTRUE) {
-      handle(line);
-      memset(line, 0, sizeof(line));
-      mgmt_write("done>\r\n");
-    }
-    uint64_t now = now_ms();
+    esp_task_wdt_add(NULL);
+    settings_load(&cfg);
+    if (!settings_store_ok())
+        error("Config damaged: explicit reset needed");
     if (in_setup) {
-      if (now >= public.setup_deadline)
-        setup_reboot(false);
-      continue;
-    }
-    if (bridge_wifi_connected()) {
-      if (!stable_at)
-        stable_at = now;
-      if (trial && now - stable_at >= 10000) {
-        settings_t old = cfg;
-        cfg.p[trial_slot] = candidate;
-        cfg.preferred = trial_slot;
-        if (persist()) {
-          trial = false;
-          memset(&candidate, 0, sizeof(candidate));
-          error("Profile association validated");
-          app_event(4, 0);
-        } else {
-          cfg = old;
-          trial = false;
-          join(policy_next(&cfg, 0));
-        }
-      }
-      failures = 0;
-      tried = 0;
-      attempt_at = now;
-      continue; /* Never scan or oscillate a healthy link. */
-    }
-    stable_at = 0;
-    if (trial) {
-      if (now - trial_at >= 45000) {
-        trial = false;
-        memset(&candidate, 0, sizeof(candidate));
-        error("Trial failed; previous profiles kept");
-        app_event(5, 0);
+        char ssid[25], pass[17];
+        portal_identity(ssid, pass);
+        portENTER_CRITICAL(&lock);
+        strcpy(public.ap_ssid, ssid);
+        strcpy(public.ap_pass, pass);
+        public.setup_deadline = now_ms() + 600000;
+        portEXIT_CRITICAL(&lock);
+        portal_start();
+    } else if (settings_take_candidate(&trial_slot, &candidate)) {
+        trial = true;
+        trial_at = now_ms();
+        join(trial_slot);
+    } else
         join(policy_next(&cfg, 0));
-      }
-      continue;
+    char line[512];
+    for (;;) {
+        esp_task_wdt_reset();
+        publish();
+        if (xQueueReceive(commands, line, pdMS_TO_TICKS(100)) == pdTRUE) {
+            handle(line);
+            memset(line, 0, sizeof(line));
+            mgmt_write("done>\r\n");
+        }
+        uint64_t now = now_ms();
+        if (in_setup) {
+            if (now >= public.setup_deadline)
+                setup_reboot(false);
+            continue;
+        }
+        bool associated = bridge_wifi_connected();
+        if (associated && !stable_at)
+            stable_at = now;
+        int decision = trial ? trial_decision(now, trial_at, stable_at, associated) : 0;
+        if (decision < 0) {
+            trial = false;
+            memset(&candidate, 0, sizeof(candidate));
+            error("Trial failed; previous profiles kept");
+            app_event(5, 0);
+            join(policy_next(&cfg, 0));
+            continue;
+        }
+        if (associated) {
+            if (!stable_at)
+                stable_at = now;
+            if (trial && decision == 1) {
+                settings_t old = cfg;
+                cfg.p[trial_slot] = candidate;
+                cfg.preferred = trial_slot;
+                if (persist()) {
+                    trial = false;
+                    memset(&candidate, 0, sizeof(candidate));
+                    error("Profile association validated");
+                    app_event(4, 0);
+                } else {
+                    cfg = old;
+                    trial = false;
+                    join(policy_next(&cfg, 0));
+                }
+            }
+            failures = 0;
+            tried = 0;
+            attempt_at = now;
+            continue; /* Never scan or oscillate a healthy link. */
+        }
+        stable_at = 0;
+        if (trial)
+            continue;
+        if (active >= 0 && now - attempt_at >= 15000 + retry_delay_ms(failures)) {
+            tried |= 1u << active;
+            int next = policy_next(&cfg, tried);
+            if (next < 0) {
+                tried = 0;
+                next = policy_next(&cfg, 0);
+                if (failures < 32)
+                    failures++;
+            }
+            error(bridge_link_status());
+            join(next);
+        }
     }
-    if (active >= 0 && now - attempt_at >= 15000 + retry_delay_ms(failures)) {
-      tried |= 1u << active;
-      int next = policy_next(&cfg, tried);
-      if (next < 0) {
-        tried = 0;
-        next = policy_next(&cfg, 0);
-        if (failures < 32)
-          failures++;
-      }
-      error(bridge_link_status());
-      join(next);
-    }
-  }
 }
 void control_init(bool setup) {
-  in_setup = setup;
-  public.active = -1;
-  public.cfg.brightness = 60;
-  public.cfg.dim_seconds = 60;
-  commands = xQueueCreate(4, 512);
-  assert(commands);
-  assert(xTaskCreate(task, "control", 6144, NULL, 3, NULL) == pdPASS);
+    in_setup = setup;
+    public.active = -1;
+    public.cfg.brightness = 60;
+    public.cfg.dim_seconds = 60;
+    commands = xQueueCreate(4, 512);
+    assert(commands);
+    assert(xTaskCreate(task, "control", 6144, NULL, 3, NULL) == pdPASS);
 }

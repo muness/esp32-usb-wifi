@@ -4,19 +4,19 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 typedef struct {
-  uint64_t ms;
-  uint16_t code, detail;
+    uint64_t ms;
+    uint16_t code, detail;
 } event_t;
 typedef struct {
-  settings_t cfg; /* public copy has passwords cleared */
-  int active;
-  bool setup, trial;
-  char error[48];
-  char ap_ssid[25], ap_pass[17];
-  uint64_t setup_deadline;
-  uint32_t free_heap, min_heap, dma_heap, control_stack, ui_stack;
-  event_t events[24];
-  unsigned event_count;
+    settings_t cfg; /* public copy has passwords cleared */
+    int active;
+    bool setup, trial;
+    char error[48];
+    char ap_ssid[25], ap_pass[17];
+    uint64_t setup_deadline;
+    uint32_t free_heap, min_heap, dma_heap, control_stack, ui_stack;
+    event_t events[24];
+    unsigned event_count;
 } app_snapshot_t;
 void settings_load(settings_t *s);
 esp_err_t settings_save(const settings_t *s);
