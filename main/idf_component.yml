@@ -1,6 +1,4 @@
-## IDF Component Manager Manifest File
 dependencies:
-  espressif/esp_tinyusb:
-    version: "^2.0.0"
-  espressif/led_strip: "^3.0.0"
-  idf: "^5.0"
+  idf: "==5.5.1"
+  espressif/tinyusb: "==0.21.0~2"
+  lvgl/lvgl: "==9.3.0"

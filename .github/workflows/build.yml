@@ -1,0 +1,30 @@
+name: firmware-and-host-tests
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: TEST_CFLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' tools/test.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-ui-previews
+          path: docs/preview-*.svg
+  firmware:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        variant: [full, headless, network-only]
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y git wget flex bison gperf python3-venv cmake ninja-build ccache libffi-dev libssl-dev libusb-1.0-0
+      - run: tools/bootstrap.sh
+      - shell: bash
+        run: |
+          . "$HOME/.cache/tdongle/esp-idf-v5.5.1/export.sh"
+          tools/test.sh
+          tools/build.sh '${{ matrix.variant }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tdongle-0.1.0-${{ matrix.variant }}
+          path: dist/tdongle-0.1.0-${{ matrix.variant }}/

@@ -1,0 +1,61 @@
+[
+  {
+    "name": "esp32-usb-wifi",
+    "url": "https://github.com/DrWhax/esp32-usb-wifi",
+    "commit": "7384f7290cf4e567b2316e8aa23e95262c7e4999",
+    "license": "MIT; tusb_ncm_main.c Unlicense OR CC0-1.0"
+  },
+  {
+    "name": "T-Dongle-S3",
+    "url": "https://github.com/Xinyuan-LilyGO/T-Dongle-S3",
+    "commit": "bb7654607d280fc2a1451d24abf6ed027287d416",
+    "license": "MIT for used board example and driver files"
+  },
+  {
+    "name": "esp-idf",
+    "url": "https://github.com/espressif/esp-idf",
+    "commit": "fcae32885b0296b32044cb99ecbdc50d98dddb83",
+    "version": "v5.5.1",
+    "license": "Apache-2.0 and per-file third-party licenses; NCM example Unlicense OR CC0-1.0"
+  },
+  {
+    "name": "esp_tinyusb",
+    "url": "https://github.com/espressif/esp-usb",
+    "commit": "6757c6ea4fff779eae8ecb30df5442544ee0fe9b",
+    "version": "2.0.1",
+    "license": "Apache-2.0",
+    "vendored": true
+  },
+  {
+    "name": "tinyusb",
+    "url": "https://github.com/espressif/tinyusb",
+    "commit": "894ea01409e0407a7dbe0ee29b2d58a4691f9046",
+    "version": "0.21.0~2",
+    "license": "MIT"
+  },
+  {
+    "name": "lvgl",
+    "url": "https://github.com/lvgl/lvgl",
+    "commit": "c033a98afddd65aaafeebea625382a94020fe4a7",
+    "version": "9.3.0",
+    "license": "MIT with per-file dependencies/fonts"
+  },
+  {
+    "name": "esp-iot-bridge",
+    "url": "https://github.com/espressif/esp-iot-bridge",
+    "commit": "667766b0feefb199afc5de7c59fc330048641fcb",
+    "audit_only": true
+  },
+  {
+    "name": "android-raspberry-pi",
+    "url": "https://github.com/tesla-android/android-raspberry-pi",
+    "commit": "7104721dd81f4a4e2d639d0cd7a10ae075ca33bd",
+    "audit_only": true
+  },
+  {
+    "name": "android-kernel-broadcom",
+    "url": "https://github.com/tesla-android/android-kernel-broadcom",
+    "commit": "bdaf9eb15e9ed2cd8c59ba3dc4031d686e2bb6ff",
+    "audit_only": true
+  }
+]

@@ -1,118 +1,122 @@
-# esp32-usb-wifi
+# T-Dongle-S3 Wi-Fi → USB Ethernet adapter
 
-ESP32-S3 port of [pico-usb-wifi](https://gitlab.com/baiyibai/pico-usb-wifi): a driverless USB Wi-Fi
-adapter (USB CDC-NCM device bridging to a Wi-Fi station).
+Development firmware for the **original LILYGO T-Dongle-S3 with 160×80 screen**. ESP-IDF + TinyUSB CDC-NCM, optional CDC-ACM console, Wi-Fi profiles, local browser setup, four status pages and APA102 state LED. No PSRAM, microSD, extra controller or Android companion app.
 
-Speeds are max USB 2.0 full speed. Speedtests show speeds of roughly 5.7Mbps.
+**Compiled and host-tested is not hardware-validated.** See [validation results](docs/VALIDATION.md) for exact builds/tests and pending checks. No claim of TeslaAndroid compatibility or throughput has been established on physical hardware. The user's existing Pi 400/TeslaAndroid installation is treated as working and must not be reconfigured to accommodate an unverified dongle.
 
-![speedtest](images/speedtest.png)
+```
+Router / phone hotspot (2.4 GHz)
+           ↕ Wi-Fi station
+      T-Dongle-S3 (status LCD)
+           ↕ USB CDC-NCM
+       Pi 400 / TeslaAndroid
+           ↕ existing Wi-Fi AP
+          display clients
+```
 
-Seeded from Espressif's `tusb_ncm` example (ESP-IDF v5.5,
-`examples/peripherals/usb/device/tusb_ncm`, Unlicense/CC0.
+The Pi obtains its address from the upstream router. This is a **single-host, station-MAC-sharing L2 forwarder**, not a general bridge or NAT router. The Pi must use the advertised station MAC on its USB interface; its existing client routing remains TeslaAndroid's responsibility. [Architecture and setup-mode decisions](docs/ADR-001.md).
 
-* station MAC adoption + raw L2 forwarding (`esp_wifi_internal_*`, no `esp_netif`)
-* reflection filter (drops the host's own frames echoed back by the AP)
-* host IPv4/IPv6 snooping (the device holds no IP; the console reports the host's)
-* **management console** on CDC-ACM (composite NCM + ACM): up to 8 credential
-  _profiles_ in NVS (`set ssid`/`set pass` edit the active one, `list`/`use`/`del`
-  manage the set), `scan` + `join <n>` to discover and stage networks, and
-  `set debug on` for a 2 s stats stream (`dbg:`-prefixed) with association
-  events and failure reasons (`badauth`/`nonet`). Changes apply immediately;
-  `save` persists. Compile-time creds are only a never-provisioned fallback
-* `tools/provision.py <ssid> [password]` — scripted provisioning over the console
-* **automatic recovery with crash telemetry**: the task watchdog panics and
-  reboots instead of hanging, and the tallies survive the warm reboot; see
-  <a href="#automatic-recovery">Automatic Recovery</a>
-* **status LED** on the board's WS2812, runtime-movable to any pin; see
-  <a href="#status-led">Status LED</a>
+## Build from pinned sources
 
-## Provisioning
-
-Provisioning is possible through three ways:
+Linux/macOS prerequisites: Git, Python 3.10+, CMake, Ninja, standard ESP-IDF prerequisites and a native C compiler for host tests. Disk budget: several GB. No project files contain development-machine paths.
 
 ```sh
-. ~/esp/esp-idf/export.sh          # or: pip install pyserial
-tools/provision.py "MyNetwork" "hunter2"
+./tools/bootstrap.sh
+# Source the export.sh path printed by bootstrap:
+. "$HOME/.cache/tdongle/esp-idf-v5.5.1/export.sh"
+./tools/test.sh
+./tools/build.sh full
+./tools/build.sh headless
+./tools/build.sh network-only
 ```
 
-Or interactively: `picocom /dev/cu.usbmodem1234561` (any baud), then `help`.
+IDF v5.5.1 commit `fcae32885b0296b32044cb99ecbdc50d98dddb83`; Espressif integration 2.0.1 vendored with small reviewed fixes; TinyUSB `0.21.0~2`; LVGL `9.3.0`. Exact commits, registry hashes and per-file licenses are in [source audit](docs/SOURCE_AUDIT.md), [dependencies.lock](dependencies.lock), and [attribution](docs/THIRD_PARTY.md). Do not run dependency update as part of a reproducibility check. Build scripts reject a different IDF commit and isolate sdkconfig per variant. Reproducible-build mode removes compile timestamps; cross-machine bit identity is not claimed without comparison.
 
-Or through a Python TUI.
+Successful builds generate `dist/tdongle-0.1.0-VARIANT/` containing application, bootloader, partition image, ELF, effective sdkconfig, manifest, flash offsets, dependency notices and SHA256SUMS. `dist` is generated/ignored, not a promise that an image already exists. Build scripts **never flash**. `full` has LCD/LED + ACM; `headless` disables LCD/LED for A/B benchmarks but keeps physical controls; `network-only` retains display/browser setup and omits ACM. None adds ECM/RNDIS/NAT. CI builds all three and uploads versioned artifacts.
 
-```
-uv run tools/tui.py
-```
+## First flash and recovery
 
-## Build
+1. Physically confirm original T-Dongle-S3, board revision, screen and [pin map](main/board.h). The schematic flash label conflicts with product documentation; check chip and flash size using the ROM tools before writing. Target is ESP32-S3, 16 MB QIO flash at 80 MHz, PSRAM disabled. Do not flash Dual/Plus hardware with this image.
+2. Hold **BOOT while plugging into USB** to enter Espressif ROM download mode. Identify its port (`/dev/ttyACM…` on Linux, `/dev/cu.usbmodem…` on macOS). Close serial tools.
+3. Read-only identification: `python -m esptool --chip esp32s3 --port PORT chip_id` and `python -m esptool --chip esp32s3 --port PORT flash_id`.
+4. After authorizing the write yourself, run `idf.py -B build-full -p PORT flash`, or use the exact command in the built package's `FLASH.txt` from that directory. No erase-all is required for an ordinary update. Custom partitions: NVS `0x9000`/64 KiB, PHY `0x19000`/4 KiB, app `0x20000`/4 MiB; remaining flash unused.
+5. Unplug/replug **without holding BOOT**. TinyUSB takes over native USB pins 19/20; subsequent reflashing may require holding BOOT while plugging in again. This ROM route remains available even if firmware USB fails.
+
+If NVS cannot initialize, the firmware does not erase it automatically. Use ROM recovery and preserve flash before investigating. Explicit confirmed factory reset clears only the adapter namespace, not PHY calibration. Flash encryption and secure boot are not enabled; saved NVS credentials are plaintext to physical flash access.
+
+## First use: local browser setup
+
+First unconfigured boot starts a temporary password-protected `TDongle-XXXXXX` Wi-Fi AP. The **screen shows the random temporary password** and `192.168.4.1`. Connect a phone/laptop to it, keep the connection despite “no Internet,” then visit **http://192.168.4.1/**. There is no captive DNS redirect and no mandatory QR code. No saved upstream password is displayed or encoded.
+
+Enter slot 1–8, profile name, exact SSID, password and priority 0–100. Save reboots into a 45-second candidate trial. Ten continuous seconds associated commits the replacement; failure retains previous saved profiles and shows an error. This validates association, **not Internet reachability**. Static host addresses are supported; no DHCP success is inferred from a source IP.
+
+Setup is an exclusive mode: NCM link down, forwarding paused, AP DHCP/HTTP active. Cancel or ten-minute timeout reboots to adapter mode. With no saved profile, cancellation leaves it unconfigured until setup is explicitly reopened or the next cold boot. Ordinary network failures do **not** expose a setup AP or erase credentials. Anyone possessing the temporary AP password can configure the device. There is no administrative listener on upstream Wi-Fi.
+
+## Console and terminal tools
+
+Install `python3 -m pip install -r tools/requirements.txt` in a virtual environment, then:
 
 ```sh
-. ~/esp/esp-idf/export.sh
-cp wifi_creds.defaults.example wifi_creds.defaults   # edit SSID/password
-SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32s3;wifi_creds.defaults" \
-  idf.py set-target esp32s3 build
+python3 tools/tui.py --port /dev/ttyACM0
+python3 tools/provision.py --port /dev/ttyACM0 --provision
+python3 tools/provision.py --port /dev/ttyACM0 --status
 ```
 
-(Changing credentials later: edit `wifi_creds.defaults`, delete `sdkconfig`,
-re-run the build command — or just use `idf.py menuconfig` → Example
-Configuration.)
+Use the corresponding `/dev/cu.usbmodem…` on macOS. Explicit port selection avoids probing unrelated devices. Tools prompt for passwords with `getpass`, never accept password command-line arguments, and suppress replies to secret-bearing requests. The firmware does not echo any input. Do not log raw serial input or type credentials into shell history. Tools are optional; normal operation is autonomous.
 
-## Flash and monitor
+Any serial terminal at 115200 can type `help` (characters do not echo). Commands:
+
+| Command | Effect |
+|---|---|
+| `status` / `diagnostics` / `show` | USB and association state, observed IP/age, byte/frame/drop counters, warm crash counts, heaps, task watermarks and bounded event log; no passwords |
+| `scan` | One explicit foreground scan; not automatic during a healthy connection. Auth mode numbers use ESP-IDF enum. Unavailable during setup/trial. |
+| `list` | Named profiles, SSIDs, priority and active slot, no credentials |
+| `profile JSON` | Add/edit a slot through the interactive tool; validates candidate before replacing saved profile |
+| `use N` | Save selected preferred slot and reconnect; unavailable during setup/trial |
+| `del N` | Delete one slot and save; use tools' confirmation prompt |
+| `display 60 0 60` | Brightness 5–100%, orientation 0/1 (opposite landscape), dim timeout 10–3600 s |
+| `setup` / `cancel` | Enter/leave temporary AP by reboot |
+| `reset`, then `confirm-reset` within 10 s | Explicit credential/settings reset |
+| `reboot` | Restart with saved state |
+
+Writes are configuration-only, spaced at least two seconds for regular settings. There is no `save` needed after validated profile submission, selection, deletion or display settings. Profiles use versioned NVS blobs; unknown/corrupt schema is reported and protected against overwrite until explicit reset. Add/edit uses a separate consumed candidate key so a power interruption cannot replace working credentials before validation. Eight slots total; replacing an existing slot preserves its old contents through trial.
+
+Preferred slot is tried first at boot, then remaining slots by descending priority. A failed attempt gets a 15-second join window plus bounded backoff of 1–30 seconds; once all slots are exhausted the cycle repeats. There are no background scans or preferred-network oscillations while associated. A newly available preferred AP is tried after a failure cycle or explicit selection. SSID/name/password are currently **printable ASCII only**: name 1–24, SSID 1–32, WPA passphrase 8–63 characters, or empty for an open network. Raw 64-hex PSKs, WEP, enterprise/EAP, Unicode SSIDs, 5 GHz and VLAN trunking are unsupported. WPA2-PSK and WPA3-SAE/transition are configured; each authentication mode still needs AP testing. Country uses the driver's conservative default/802.11d; no hardcoded region override.
+
+## Screen, button and LED
+
+Short press cycles **Connection → Traffic → Health → Setup**. Debounce: 30 ms. Runtime hold: 1.5 seconds, fires once until release. A dimmed screen consumes the **entire first gesture** to wake without performing an action. BOOT held at power-on retains ROM behavior.
+
+Hold opens the setup/profile menu; short press advances, release then hold selects. Entries: enter/cancel setup AP, slots 1–8, factory reset, exit. Factory reset requires selecting its entry, releasing, then a second deliberate hold within ten seconds; short press cancels. Empty slot selection is rejected without altering credentials.
+
+| Page | Meaning |
+|---|---|
+| Connection | SSID/RSSI, USB `ENUM` (configured transport) versus `WAIT`/`SUSP`, association, **observed** host IPv4 and age/expiry; Internet always “not checked.” Last connection error is shown when no fresh address. |
+| Traffic | D = Wi-Fi → Pi USB, U = Pi USB → Wi-Fi. Mb/s from byte deltas/time, decimal MB session totals, forwarded/dropped frames and 8-second rolling aggregate-rate graph (autoscaled). Per-cause and reflection counts are in diagnostics. |
+| Health | Three detail groups rotate every four seconds: device/connection uptime, join attempts and last disconnect reason, actual USB bus resets; current/minimum heap and reset reason; warm boot/watchdog/panic counts and last notice. |
+| Setup | Active named profile, trial status and setup instructions. In AP mode, temporary SSID/password/URL replace normal pages. |
+
+Long SSIDs/addresses are clipped within fixed 156×13 pixel rows. Full IPv6 source observations (including link-local/ULA) and freshness are available in console diagnostics; they do not overwrite LCD fields. [Synthetic layout previews](docs/preview-0.svg) use the actual text formatter with an approximate browser font, **not runtime measurements or hardware screenshots**.
+
+Backlight is active-low PWM at 1 kHz, default 60%, dims to 5% after 60 seconds. Orientation selects either landscape direction. APA102: blue = unconfigured/setup; blinking amber = joining/waiting for USB; green = associated **and USB transport ready**, not Internet verified; red = common no-AP/auth failure. Optional LED/display errors do not abort network startup. SPI timeout disables further rendering while retaining any in-flight DMA buffer.
+
+## Troubleshooting and physical validation
+
+- **USB absent:** use ROM BOOT recovery, verify power/data port and actual board revision. Try network-only build only after recording the composite enumeration failure.
+- **USB enumerates but no address:** record host interface MAC, driver, NCM carrier, Wi-Fi status, DHCP/ARP and router lease evidence. `ENUM` does not claim the host interface is configured. Do not add NAT to mask this.
+- **AP not found:** check 2.4 GHz, exact case/SSID, channel/region, hotspot availability and antenna clearance near the Pi. Source observations clear/expire; old addresses are not current leases.
+- **Auth failed:** correct password/auth mode through a staged profile. WPA3 behavior, static IP, multicast/IPv6 and captive-portal networks need explicit tests. Adapter does not solve a captive portal for the host.
+- **No Internet but associated:** check Pi routes/DNS and upstream access. The IP-less adapter does not invent its own probes. Check a real downstream TeslaAndroid browser client as well as the Pi.
+- **Power resets:** hardware docs specify up to 800 mA while USB2 descriptor requests 500 mA. Measure peaks and 5 V rail on the actual Pi. Bus-power budget and suspend compliance are unresolved physical release gates.
+- **Display wrong colors/offset:** verify original-board revision, SPI pins and ST7735 panel. Diagnose networking with headless build. Do not connect a WS2812 driver to GPIO38.
+- **Storage error:** do not auto-erase. Recover/read flash with ROM tools, investigate, or perform the explicit confirmed factory reset.
+
+Read-only host evidence (unavailable tools/permissions are recorded, not fatal):
 
 ```sh
-idf.py -p /dev/cu.usbmodem101 flash monitor
+python3 tools/host_diagnostics.py > host-evidence.json
+# Only if adb is already available and authorized on the existing Android image:
+python3 tools/host_diagnostics.py --adb > teslaandroid-evidence.json
 ```
 
-Note: the firmware takes over the S3's only USB port with the OTG peripheral
-(NCM device), so after first flash the serial-JTAG console disappears and the
-board re-enumerates as a USB network interface. To reflash, hold BOOT while
-plugging in (download mode), then run the flash command again.
-
-## What you should see on the host
-
-The Mac/Linux host gets a new network interface (CDC-NCM, in-box driver) whose
-MAC is the S3's Wi-Fi station MAC; once the station associates, DHCP on that
-interface yields an address from the AP's own subnet.
-
-## Automatic Recovery
-
-If the firmware ever hangs or crashes, it recovers on its own instead of
-sitting dead until a replug: the task watchdog is configured to panic, and a
-panic reboots the chip, which re-enumerates and re-associates within a few
-seconds.
-
-The diagnostic trail survives the reboot. A crashlog in RTC noinit RAM (which
-warm resets do not clear) holds the boots/hangs/faults tallies and a
-once-per-second snapshot of the bridge counters, so after a recovery `show`
-reports what the bridge was doing just before it died:
-
-```
-    health:    boots=3 hangs=1 faults=0
-    RECOVERED from watchdog this boot; pre-crash ->wifi=4499 ->host=4004 ...
-```
-
-`boots` counts warm reboots since the last cold power-on; `hangs` are watchdog
-recoveries, `faults` are panic recoveries. A cold power-on (replug) resets all
-three — that is how you distinguish "recovered overnight" from "freshly
-plugged in".
-
-The path is self-testable: `crash` on the console faults on purpose (panic →
-`faults`), `hang` spins until the task watchdog fires (~5 s → `hangs`). Either
-way the device drops off USB, reboots, re-enumerates, and re-associates by
-itself — no replug — and the next `show` carries the RECOVERED report.
-
-## Status LED
-
-The board's WS2812 LED mirrors the pico firmware's states:
-
-| Pattern           | Meaning                                          |
-|-------------------|--------------------------------------------------|
-| Solid             | Associated — the normal running state            |
-| Slow blink (1 Hz) | Wi-Fi configured, associating                    |
-| Fast blink (5 Hz) | No Wi-Fi configured — provision over the console |
-| Off               | USB not ready                                    |
-
-The data pin varies between S3 boards (48 on ESP32-S3-DevKitC-1 v1.0, 38 on
-v1.1, 35 on some third-party boards) and a wrong pin fails silently, so the
-pin is runtime-configurable: `set led <gpio>` on the console moves it live and
-persists it in NVS — try pins until the LED reacts, no reflash needed. The
-compile-time default is `idf.py menuconfig` → Example Configuration.
+No root command, kernel modification, daemon or custom Android app is required by this firmware. Diagnostics include MACs, addresses and other network metadata; review before sharing. [Acceptance/benchmark checklist](docs/ACCEPTANCE.md) covers downstream coexistence, recovery, provisioning failure cases and overnight soak. Do not reflash attached hardware or change the working TeslaAndroid network without explicit owner confirmation.

@@ -1,0 +1,234 @@
+{
+  "full": {
+    "compiled": true,
+    "app_bytes": 1186880,
+    "app_sha256": "1ce493876c13d2e56cb9a3d6bd2c43d34dd95bd1fd69cf7b9f7537393ca41a74",
+    "descriptors": {
+      "compiled_descriptors": "PASS",
+      "variant": "full",
+      "vid": "0x303a",
+      "pid": "0x4001",
+      "usb_max_power_ma": 500,
+      "interfaces": [
+        {
+          "number": 0,
+          "alt": 0,
+          "cls": 2,
+          "subclass": 2,
+          "protocol": 0
+        },
+        {
+          "number": 1,
+          "alt": 0,
+          "cls": 10,
+          "subclass": 0,
+          "protocol": 0
+        },
+        {
+          "number": 2,
+          "alt": 0,
+          "cls": 2,
+          "subclass": 13,
+          "protocol": 0
+        },
+        {
+          "number": 3,
+          "alt": 0,
+          "cls": 10,
+          "subclass": 0,
+          "protocol": 1
+        },
+        {
+          "number": 3,
+          "alt": 1,
+          "cls": 10,
+          "subclass": 0,
+          "protocol": 1
+        }
+      ]
+    },
+    "link_time_size": {
+      "dram_data": 0,
+      "dram_bss": 0,
+      "dram_rodata": 0,
+      "dram_other": 0,
+      "used_dram": 0,
+      "dram_total": 0,
+      "used_dram_ratio": 0,
+      "dram_remain": 0,
+      "iram_vectors": 1028,
+      "iram_text": 15356,
+      "iram_other": 0,
+      "used_iram": 16384,
+      "iram_total": 16384,
+      "used_iram_ratio": 1.0,
+      "iram_remain": 0,
+      "diram_data": 39420,
+      "diram_bss": 68568,
+      "diram_text": 79527,
+      "diram_vectors": 0,
+      "diram_rodata": 0,
+      "diram_other": 0,
+      "diram_total": 341760,
+      "used_diram": 187515,
+      "used_diram_ratio": 0.5486745084269663,
+      "diram_remain": 154245,
+      "flash_code": 900668,
+      "flash_rodata": 150472,
+      "flash_other": 256,
+      "used_flash_non_ram": 1051396,
+      "total_size": 1186727
+    },
+    "hardware_tested": false
+  },
+  "headless": {
+    "compiled": true,
+    "app_bytes": 884064,
+    "app_sha256": "0490dbacbd0a62fc292b2a3cbd698fce4c5908e8b960f45f3303246ee5f96b54",
+    "descriptors": {
+      "compiled_descriptors": "PASS",
+      "variant": "headless",
+      "vid": "0x303a",
+      "pid": "0x4001",
+      "usb_max_power_ma": 500,
+      "interfaces": [
+        {
+          "number": 0,
+          "alt": 0,
+          "cls": 2,
+          "subclass": 2,
+          "protocol": 0
+        },
+        {
+          "number": 1,
+          "alt": 0,
+          "cls": 10,
+          "subclass": 0,
+          "protocol": 0
+        },
+        {
+          "number": 2,
+          "alt": 0,
+          "cls": 2,
+          "subclass": 13,
+          "protocol": 0
+        },
+        {
+          "number": 3,
+          "alt": 0,
+          "cls": 10,
+          "subclass": 0,
+          "protocol": 1
+        },
+        {
+          "number": 3,
+          "alt": 1,
+          "cls": 10,
+          "subclass": 0,
+          "protocol": 1
+        }
+      ]
+    },
+    "link_time_size": {
+      "dram_data": 0,
+      "dram_bss": 0,
+      "dram_rodata": 0,
+      "dram_other": 0,
+      "used_dram": 0,
+      "dram_total": 0,
+      "used_dram_ratio": 0,
+      "dram_remain": 0,
+      "iram_vectors": 1028,
+      "iram_text": 15356,
+      "iram_other": 0,
+      "used_iram": 16384,
+      "iram_total": 16384,
+      "used_iram_ratio": 1.0,
+      "iram_remain": 0,
+      "diram_data": 38960,
+      "diram_bss": 35032,
+      "diram_text": 70499,
+      "diram_vectors": 0,
+      "diram_rodata": 0,
+      "diram_other": 0,
+      "diram_total": 341760,
+      "used_diram": 144491,
+      "used_diram_ratio": 0.42278499531835206,
+      "diram_remain": 197269,
+      "flash_code": 634460,
+      "flash_rodata": 123352,
+      "flash_other": 256,
+      "used_flash_non_ram": 758068,
+      "total_size": 883911
+    },
+    "hardware_tested": false
+  },
+  "network-only": {
+    "compiled": true,
+    "app_bytes": 1178608,
+    "app_sha256": "e63c3075e71835e8b62b3214b1f7ab2ea2ff263cf56cc40688e9303618640718",
+    "descriptors": {
+      "compiled_descriptors": "PASS",
+      "variant": "network-only",
+      "vid": "0x303a",
+      "pid": "0x4000",
+      "usb_max_power_ma": 500,
+      "interfaces": [
+        {
+          "number": 0,
+          "alt": 0,
+          "cls": 2,
+          "subclass": 13,
+          "protocol": 0
+        },
+        {
+          "number": 1,
+          "alt": 0,
+          "cls": 10,
+          "subclass": 0,
+          "protocol": 1
+        },
+        {
+          "number": 1,
+          "alt": 1,
+          "cls": 10,
+          "subclass": 0,
+          "protocol": 1
+        }
+      ]
+    },
+    "link_time_size": {
+      "dram_data": 0,
+      "dram_bss": 0,
+      "dram_rodata": 0,
+      "dram_other": 0,
+      "used_dram": 0,
+      "dram_total": 0,
+      "used_dram_ratio": 0,
+      "dram_remain": 0,
+      "iram_vectors": 1028,
+      "iram_text": 15356,
+      "iram_other": 0,
+      "used_iram": 16384,
+      "iram_total": 16384,
+      "used_iram_ratio": 1.0,
+      "iram_remain": 0,
+      "diram_data": 38380,
+      "diram_bss": 66776,
+      "diram_text": 79527,
+      "diram_vectors": 0,
+      "diram_rodata": 0,
+      "diram_other": 0,
+      "diram_total": 341760,
+      "used_diram": 184683,
+      "used_diram_ratio": 0.5403879915730337,
+      "diram_remain": 157077,
+      "flash_code": 895108,
+      "flash_rodata": 148808,
+      "flash_other": 256,
+      "used_flash_non_ram": 1044172,
+      "total_size": 1178463
+    },
+    "hardware_tested": false
+  }
+}
