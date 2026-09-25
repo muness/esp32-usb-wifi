@@ -36,6 +36,13 @@
 
 static const char *TAG = "USB_NCM";
 
+enum { MICROSECONDS_PER_MILLISECOND = 1000 };
+
+static uint64_t monotonic_time_ms(void)
+{
+    return (uint64_t)esp_timer_get_time() / MICROSECONDS_PER_MILLISECOND;
+}
+
 static bool s_is_wifi_connected;
 static uint8_t s_mac[6];      /* station MAC; the host's NCM interface adopts it */
 static char s_ssid[33];       /* active credentials (console may replace them) */
@@ -124,6 +131,7 @@ static host_observation_t s_host;
 static portMUX_TYPE s_host_lock = portMUX_INITIALIZER_UNLOCKED;
 static uint32_t s_host_epoch;
 
+/* Invalidate observations and any in-flight frame learned in the old epoch. */
 static void clear_host_observation(void)
 {
     portENTER_CRITICAL(&s_host_lock);
@@ -135,20 +143,34 @@ static void clear_host_observation(void)
 void tud_event_hook_cb(uint8_t rhport, uint32_t eventid, bool in_isr)
 {
     (void)rhport;
-    if (eventid != DCD_EVENT_BUS_RESET && eventid != DCD_EVENT_UNPLUGGED) return;
-    if (in_isr) portENTER_CRITICAL_ISR(&s_host_lock);
-    else portENTER_CRITICAL(&s_host_lock);
+
+    /* A USB reset or unplug makes the previously observed host address stale. */
+    if (eventid != DCD_EVENT_BUS_RESET && eventid != DCD_EVENT_UNPLUGGED) {
+        return;
+    }
+
+    if (in_isr) {
+        portENTER_CRITICAL_ISR(&s_host_lock);
+    } else {
+        portENTER_CRITICAL(&s_host_lock);
+    }
+
     host_observation_clear(&s_host);
     s_host_epoch++;
-    if (in_isr) portEXIT_CRITICAL_ISR(&s_host_lock);
-    else portEXIT_CRITICAL(&s_host_lock);
+
+    if (in_isr) {
+        portEXIT_CRITICAL_ISR(&s_host_lock);
+    } else {
+        portEXIT_CRITICAL(&s_host_lock);
+    }
 }
 
+/* Learn an address only if forwarding finished in the same connected epoch. */
 static void snoop_host_addr(const uint8_t *frame, uint16_t len, uint32_t epoch)
 {
     portENTER_CRITICAL(&s_host_lock);
     if (epoch == s_host_epoch && s_is_wifi_connected) {
-        host_observe_frame(&s_host, frame, len, esp_timer_get_time() / 1000);
+        host_observe_frame(&s_host, frame, len, monotonic_time_ms());
     }
     portEXIT_CRITICAL(&s_host_lock);
 }
@@ -156,6 +178,7 @@ static void snoop_host_addr(const uint8_t *frame, uint16_t len, uint32_t epoch)
 static esp_err_t usb_recv_callback(void *buffer, uint16_t len, void *ctx)
 {
     portENTER_CRITICAL(&s_host_lock);
+    /* A reset during Wi-Fi TX changes the epoch and rejects this old frame. */
     const uint32_t epoch = s_host_epoch;
     portEXIT_CRITICAL(&s_host_lock);
     if (s_is_wifi_connected) {
@@ -221,6 +244,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             console_debug_printf("Wi-Fi link down (reason %d)", d->reason);
         }
         s_is_wifi_connected = false;
+        /* Do not display an address learned on the previous AP connection. */
         clear_host_observation();
         esp_wifi_internal_reg_rxcb(ESP_IF_WIFI_STA, NULL);
         if (s_ssid[0]) { /* paced re-join, unless unprovisioned */
@@ -228,6 +252,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) {
         ESP_LOGI(TAG, "WiFi STA connected");
+        /* Start a new observation epoch after each association. */
         clear_host_observation();
         esp_wifi_internal_reg_rxcb(ESP_IF_WIFI_STA, pkt_wifi2usb);
         s_is_wifi_connected = true;
@@ -291,7 +316,7 @@ bool bridge_wifi_connected(void)
 bool bridge_host_ipv4(uint8_t ip[4])
 {
     portENTER_CRITICAL(&s_host_lock);
-    bool valid = host_observed_ipv4(&s_host, ip, esp_timer_get_time() / 1000);
+    bool valid = host_observed_ipv4(&s_host, ip, monotonic_time_ms());
     portEXIT_CRITICAL(&s_host_lock);
     return valid;
 }
@@ -299,7 +324,7 @@ bool bridge_host_ipv4(uint8_t ip[4])
 bool bridge_host_ipv6(uint8_t ip[16])
 {
     portENTER_CRITICAL(&s_host_lock);
-    bool valid = host_observed_ipv6(&s_host, ip, esp_timer_get_time() / 1000);
+    bool valid = host_observed_ipv6(&s_host, ip, monotonic_time_ms());
     portEXIT_CRITICAL(&s_host_lock);
     return valid;
 }
@@ -307,6 +332,7 @@ bool bridge_host_ipv6(uint8_t ip[16])
 void wifi_apply_creds(const char *ssid, const char *pass)
 {
     s_is_wifi_connected = false;
+    /* Credential changes must not retain addresses from the old network. */
     clear_host_observation();
     strlcpy(s_ssid, ssid, sizeof(s_ssid));
     strlcpy(s_pass, pass, sizeof(s_pass));

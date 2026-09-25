@@ -47,11 +47,17 @@ enum {
   IPV6_VERSION_FIELD = IPV6_VERSION << IPV6_VERSION_SHIFT,
   IPV6_GLOBAL_UNICAST_FIRST_BYTE = 0x20,
   IPV6_LINK_LOCAL_FIRST_BYTE = 0xfe,
+  TEST_OBSERVATION_TIME_MS = 1000,
+  TEST_CLOCK_BEFORE_OBSERVATION_MS = TEST_OBSERVATION_TIME_MS - 1,
+  TEST_OBSERVATION_BEFORE_EXPIRY_MS = TEST_OBSERVATION_TIME_MS +
+      HOST_OBSERVATION_TTL_MS - 1,
+  TEST_OBSERVATION_AT_EXPIRY_MS = TEST_OBSERVATION_TIME_MS +
+      HOST_OBSERVATION_TTL_MS,
 };
 
 static void observe_frame_at_test_time(host_observation_t *state,
                                        const uint8_t *frame, size_t frame_len) {
-  host_observe_frame(state, frame, frame_len, 1000);
+  host_observe_frame(state, frame, frame_len, TEST_OBSERVATION_TIME_MS);
 }
 
 static void write_big_endian_u16(uint8_t *bytes, uint16_t value) {
@@ -184,20 +190,23 @@ static void test_deterministic_malformed_frame_corpus(void) {
 }
 
 static void test_observation_expiry_and_clear(void) {
-  host_observation_t state = {.valid4 = true, .seen4_ms = 1000};
+  host_observation_t state = {.valid4 = true,
+                              .seen4_ms = TEST_OBSERVATION_TIME_MS};
   uint8_t address[16] = {0};
 
-  assert(host_observed_ipv4(&state, address, 60999));
-  assert(!host_observed_ipv4(&state, address, 61000));
-  assert(!host_observed_ipv4(&state, address, 999));
+  assert(
+      host_observed_ipv4(&state, address, TEST_OBSERVATION_BEFORE_EXPIRY_MS));
+  assert(!host_observed_ipv4(&state, address, TEST_OBSERVATION_AT_EXPIRY_MS));
+  assert(
+      !host_observed_ipv4(&state, address, TEST_CLOCK_BEFORE_OBSERVATION_MS));
 
   state.valid6 = true;
-  state.seen6_ms = 1000;
-  assert(host_observed_ipv6(&state, address, 1001));
+  state.seen6_ms = TEST_OBSERVATION_TIME_MS;
+  assert(host_observed_ipv6(&state, address, TEST_OBSERVATION_TIME_MS + 1));
 
   host_observation_clear(&state);
-  assert(!host_observed_ipv4(&state, address, 1001));
-  assert(!host_observed_ipv6(&state, address, 1001));
+  assert(!host_observed_ipv4(&state, address, TEST_OBSERVATION_TIME_MS + 1));
+  assert(!host_observed_ipv6(&state, address, TEST_OBSERVATION_TIME_MS + 1));
 }
 
 int main(void) {
