@@ -26,6 +26,7 @@ void bridge_snapshot(bridge_snapshot_t *s);
 void bridge_get_mac(uint8_t mac[6]);
 void bridge_get_crash(bridge_crash_info_t *c);
 bool bridge_wifi_connected(void);
+uint64_t bridge_connected_since_ms(void);
 const char *bridge_link_status(void);
 bool bridge_host_ipv4(uint8_t ip[4]);
 bool bridge_host_ipv6(uint8_t ip[16]);

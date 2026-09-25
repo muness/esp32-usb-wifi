@@ -126,6 +126,12 @@ bool bridge_wifi_connected(void) {
     portEXIT_CRITICAL(&s_lock);
     return v;
 }
+uint64_t bridge_connected_since_ms(void) {
+    portENTER_CRITICAL(&s_lock);
+    uint64_t since = s_connected ? s_connected_ms : 0;
+    portEXIT_CRITICAL(&s_lock);
+    return since;
+}
 void bridge_snapshot(bridge_snapshot_t *s) {
     portENTER_CRITICAL(&s_lock);
     s->stats = s_stats;

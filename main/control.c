@@ -331,9 +331,12 @@ static void task(void *arg) {
                 setup_reboot(false);
             continue;
         }
-        bool associated = bridge_wifi_connected();
-        if (associated && !stable_at)
-            stable_at = now;
+        // Use the association event timestamp, not polling duration: a brief
+        // disconnect/reconnect between polls must restart candidate validation.
+        uint64_t associated_since = bridge_connected_since_ms();
+        bool associated = associated_since != 0;
+        if (associated)
+            stable_at = associated_since;
         int decision = trial ? trial_decision(now, trial_at, stable_at, associated) : 0;
         if (decision < 0) {
             trial = false;
@@ -344,8 +347,6 @@ static void task(void *arg) {
             continue;
         }
         if (associated) {
-            if (!stable_at)
-                stable_at = now;
             if (trial && decision == 1) {
                 settings_t old = cfg;
                 cfg.p[trial_slot] = candidate;

@@ -194,6 +194,10 @@ int main(void) {
     assert(trial_decision(45000, 0, 35001, true) == -1);
     assert(trial_decision(46000, 0, 36000, true) == -1);
     assert(trial_decision(45000, 0, 0, false) == -1);
+    // An association epoch changes even if a disconnect happens between polls.
+    assert(trial_decision(12000, 1000, 1000, true) == 1);
+    assert(trial_decision(12000, 1000, 11900, true) == 0);
+    assert(trial_decision(46000, 1000, 45900, true) == -1);
     buttons();
     layout();
     puts("PASS: packet parsing/fuzz, freshness, rates, profiles/backoff, button "
