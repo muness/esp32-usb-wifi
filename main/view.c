@@ -12,7 +12,10 @@ void view_lines(const view_t *v, char lines[5][32]) {
         snprintf(b[3], 128, "192.168.4.1");
         snprintf(b[4], 128, "%s", v->error[0] ? v->error : "Bridge paused");
     } else if (v->page == 0) {
-        snprintf(b[0], 128, "%.18s %ddBm", v->ssid, v->rssi);
+        if (v->associated && v->rssi != INT8_MIN)
+            snprintf(b[0], 128, "%.18s %ddBm", v->ssid, v->rssi);
+        else
+            snprintf(b[0], 128, "%.18s RSSI --", v->ssid);
         snprintf(b[1], 128, "USB %s WIFI %s",
                  v->usb_ready     ? "ENUM"
                  : v->usb_mounted ? "SUSP"
@@ -41,7 +44,7 @@ void view_lines(const view_t *v, char lines[5][32]) {
             snprintf(b[2], 128, "Min heap %" PRIu32, v->min_heap);
             snprintf(b[3], 128, "Reset reason %" PRIu32, v->reset);
         } else {
-            snprintf(b[1], 128, "Warm boots %" PRIu32, v->boots);
+            snprintf(b[1], 128, "Session boots %" PRIu32, v->boots);
             snprintf(b[2], 128, "WDT %" PRIu32 " Panic %" PRIu32, v->watchdogs, v->panics);
             snprintf(b[3], 128, "%s", v->error);
         }

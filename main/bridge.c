@@ -141,7 +141,7 @@ void bridge_snapshot(bridge_snapshot_t *s) {
     s->usb_mounted = tud_mounted();
     s->usb_ready = tud_ready();
     wifi_ap_record_t ap;
-    s->rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : 0;
+    s->rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : INT8_MIN;
 }
 bool bridge_host_ipv4(uint8_t ip[4]) {
     portENTER_CRITICAL(&s_lock);

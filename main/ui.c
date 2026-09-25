@@ -307,7 +307,10 @@ static void task(void *arg) {
                     text_clip(lines[0], sizeof(lines[0]), v.ssid, 26);
                     lv_obj_set_width(labels[0], 104);
                     char signal[16];
-                    snprintf(signal, sizeof(signal), "%ddBm", v.rssi);
+                    if (v.associated && v.rssi != INT8_MIN)
+                        snprintf(signal, sizeof(signal), "%ddBm", v.rssi);
+                    else
+                        strcpy(signal, "RSSI --");
                     if (strcmp(lv_label_get_text(signal_label), signal))
                         lv_label_set_text(signal_label, signal);
                     lv_obj_remove_flag(signal_label, LV_OBJ_FLAG_HIDDEN);

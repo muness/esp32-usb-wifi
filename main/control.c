@@ -121,10 +121,15 @@ static void status(void) {
     app_snapshot(&a);
     bridge_crash_info_t c;
     bridge_get_crash(&c);
-    console_printf("mode=%s trial=%d active=%d wifi=%s rssi=%d usb_enumerated=%d "
+    char signal[12];
+    if (b.associated && b.rssi != INT8_MIN)
+        snprintf(signal, sizeof(signal), "%d", b.rssi);
+    else
+        strcpy(signal, "unknown");
+    console_printf("mode=%s trial=%d active=%d wifi=%s rssi=%s usb_enumerated=%d "
                    "usb_transport_ready=%d host_interface_ready=unknown "
                    "internet=not_checked\r\n",
-                   in_setup ? "setup" : "adapter", trial, active + 1, bridge_link_status(), b.rssi,
+                   in_setup ? "setup" : "adapter", trial, active + 1, bridge_link_status(), signal,
                    b.usb_mounted, b.usb_ready);
     uint8_t ip[16];
     if (bridge_host_ipv4(ip))

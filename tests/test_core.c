@@ -172,6 +172,12 @@ static void layout(void) {
             if (p == 0)
                 assert(!strcmp(lines[4], "Internet: not checked"));
         }
+    v.page = 0;
+    v.associated = false;
+    strcpy(v.ssid, "Offline");
+    char offline[5][32];
+    view_lines(&v, offline);
+    assert(strstr(offline[0], "RSSI --"));
     char out[5];
     text_clip(out, sizeof(out), "abcdef", 26);
     assert(!strcmp(out, "a..."));
