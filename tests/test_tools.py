@@ -49,3 +49,8 @@ class Packaging(unittest.TestCase):
             found=list(package.notice_sources(['',str(root),str(output),str(component)],root,root/'idf'))
             self.assertEqual([p.name for _,p in found],['LICENSE'])
             self.assertEqual(found[0][0],component)
+
+    def test_archive_names_preserve_version_and_variant(self):
+        package=load('package')
+        self.assertEqual(str(package.archive_path(Path('dist/tdongle-0.1.0-full'))),'dist/tdongle-0.1.0-full.tar.gz')
+        self.assertNotEqual(package.archive_path(Path('full')),package.archive_path(Path('network-only')))

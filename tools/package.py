@@ -27,6 +27,10 @@ def notice_sources(paths, project, idf):
                 yield root,item
 
 
+def archive_path(out):
+    return out.parent / (out.name + ".tar.gz")
+
+
 def main():
     build, variant = Path(sys.argv[1]), sys.argv[2]
     version = '0.1.0'
@@ -64,7 +68,7 @@ def main():
         if p.is_file() and p.name != 'SHA256SUMS':
             checksums.append(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(out)}')
     (out / 'SHA256SUMS').write_text('\n'.join(checksums)+'\n')
-    archive=out.with_suffix('.tar.gz')
+    archive=archive_path(out)
     with archive.open('wb') as raw:
         with gzip.GzipFile(filename='',mode='wb',fileobj=raw,mtime=0) as zipped:
             with tarfile.open(fileobj=zipped,mode='w') as tar:
