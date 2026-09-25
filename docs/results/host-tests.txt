@@ -1,0 +1,18 @@
+PASS: packet parsing/fuzz, freshness, rates, profiles/backoff, button gestures, layout
+PASS: five synthetic 160x80 layout previews
+PASS: actual TinyUSB wrapper success, cancellation, deadline/copy race, backpressure, recovery ownership
+PASS: actual NVS module defaults, failed commit, candidate consume, interrupted trial, schema rejection, explicit reset (mock NVS)
+PASS: shared browser/serial profile parser malformed, duplicate, escaped-NUL, numeric and credential validation
+test_archive_names_preserve_version_and_variant (test_tools.Packaging.test_archive_names_preserve_version_and_variant) ... ok
+test_virtual_component_cannot_recurse_into_artifacts (test_tools.Packaging.test_virtual_component_cannot_recurse_into_artifacts) ... ok
+test_limits (test_tools.Tools.test_limits) ... ok
+test_missing_tool (test_tools.Tools.test_missing_tool) ... ok
+test_no_secret_arguments (test_tools.Tools.test_no_secret_arguments) ... ok
+test_open (test_tools.Tools.test_open) ... ok
+test_permission_denied (test_tools.Tools.test_permission_denied) ... ok
+test_read_only (test_tools.Tools.test_read_only) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.007s
+
+OK
