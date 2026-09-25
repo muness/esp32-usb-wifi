@@ -1,28 +1,189 @@
 /* SPDX-License-Identifier: MIT */
 #include "host_observation.h"
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-int main(void)
-{
-    uint8_t f[128] = {0}; host_observation_t s = {0};
-    f[12]=8; f[14]=0x45; f[17]=20; f[26]=192; f[29]=2;
-    for (size_t n=0;n<34;n++) {host_observe_frame(&s,f,n);assert(!s.valid4);}
-    host_observe_frame(&s,f,34); assert(s.valid4 && s.ipv4[3]==2);
-    s=(host_observation_t){0};f[14]=0x44;host_observe_frame(&s,f,34);assert(!s.valid4);
-    f[14]=0x46;host_observe_frame(&s,f,34);assert(!s.valid4);
-    f[14]=0x45;f[17]=21;host_observe_frame(&s,f,34);assert(!s.valid4);
-    memset(f,0,sizeof(f));f[12]=8;f[13]=6;f[15]=1;f[16]=8;f[18]=6;f[19]=4;f[21]=1;f[28]=10;
-    host_observe_frame(&s,f,32);assert(!s.valid4);host_observe_frame(&s,f,42);assert(s.valid4);
-    s=(host_observation_t){0};f[18]=5;host_observe_frame(&s,f,42);assert(!s.valid4);
-    memset(f,0,sizeof(f));f[12]=0x86;f[13]=0xdd;f[14]=0x60;f[22]=0x20;
-    host_observe_frame(&s,f,38);assert(!s.valid6);host_observe_frame(&s,f,54);assert(s.valid6);
-    s=(host_observation_t){0};f[19]=1;host_observe_frame(&s,f,54);assert(!s.valid6);
-    f[19]=0;f[22]=0xfe;host_observe_frame(&s,f,54);assert(!s.valid6);
-    uint32_t rng=1;
-    for(unsigned k=0;k<10000;k++) {
-        for(unsigned i=0;i<sizeof(f);i++){rng=rng*1664525+1013904223;f[i]=rng>>24;}
-        host_observe_frame(&s,f,k%sizeof(f));
+
+enum {
+  TEST_FRAME_CAPACITY = 128,
+  ETHERNET_HEADER_SIZE = 14,
+  ETHERNET_TYPE_OFFSET = 12,
+  ETHERNET_PAYLOAD_OFFSET = ETHERNET_HEADER_SIZE,
+  ETHERNET_TYPE_IPV4_HIGH = 0x08,
+  ETHERNET_TYPE_IPV4_LOW = 0x00,
+  ETHERNET_TYPE_ARP_HIGH = 0x08,
+  ETHERNET_TYPE_ARP_LOW = 0x06,
+  ETHERNET_TYPE_IPV6_HIGH = 0x86,
+  ETHERNET_TYPE_IPV6_LOW = 0xdd,
+  IPV4_VERSION_SHIFT = 4,
+  IPV4_VERSION = 4,
+  IPV4_IHL_WORDS = 5,
+  IPV4_SHORT_IHL_WORDS = 4,
+  IPV4_LONG_IHL_WORDS = 6,
+  IPV4_VERSION_AND_IHL = (IPV4_VERSION << IPV4_VERSION_SHIFT) | IPV4_IHL_WORDS,
+  IPV4_HEADER_SIZE = IPV4_IHL_WORDS * 4,
+  IPV4_TOTAL_LENGTH_OFFSET = 16,
+  IPV4_SOURCE_ADDRESS_OFFSET = 26,
+  IPV4_SOURCE_LAST_OCTET_OFFSET = IPV4_SOURCE_ADDRESS_OFFSET + 3,
+  ARP_HARDWARE_TYPE_OFFSET = ETHERNET_PAYLOAD_OFFSET,
+  ARP_PROTOCOL_TYPE_OFFSET = ARP_HARDWARE_TYPE_OFFSET + 2,
+  ARP_HARDWARE_LENGTH_OFFSET = ARP_PROTOCOL_TYPE_OFFSET + 2,
+  ARP_PROTOCOL_LENGTH_OFFSET = ARP_HARDWARE_LENGTH_OFFSET + 1,
+  ARP_OPERATION_OFFSET = 20,
+  ARP_SENDER_IPV4_OFFSET = 28,
+  ARP_PACKET_SIZE = 28,
+  ARP_FULL_FRAME_SIZE = ETHERNET_HEADER_SIZE + ARP_PACKET_SIZE,
+  ARP_ETHERNET_HARDWARE_TYPE = 1,
+  ARP_ETHERNET_ADDRESS_SIZE = 6,
+  ARP_IPV4_ADDRESS_SIZE = 4,
+  ARP_REQUEST = 1,
+  IPV6_PAYLOAD_LENGTH_OFFSET = 18,
+  IPV6_SOURCE_ADDRESS_OFFSET = 22,
+  IPV6_HEADER_SIZE = 40,
+  IPV6_FULL_FRAME_SIZE = ETHERNET_HEADER_SIZE + IPV6_HEADER_SIZE,
+  IPV6_VERSION_SHIFT = 4,
+  IPV6_VERSION = 6,
+  IPV6_VERSION_FIELD = IPV6_VERSION << IPV6_VERSION_SHIFT,
+  IPV6_GLOBAL_UNICAST_FIRST_BYTE = 0x20,
+  IPV6_LINK_LOCAL_FIRST_BYTE = 0xfe,
+};
+
+static void write_big_endian_u16(uint8_t *bytes, uint16_t value) {
+  bytes[0] = (uint8_t)(value >> 8);
+  bytes[1] = (uint8_t)value;
+}
+
+static void set_ether_type(uint8_t frame[TEST_FRAME_CAPACITY], uint8_t high,
+                           uint8_t low) {
+  frame[ETHERNET_TYPE_OFFSET] = high;
+  frame[ETHERNET_TYPE_OFFSET + 1] = low;
+}
+
+static void make_ipv4_frame(uint8_t frame[TEST_FRAME_CAPACITY]) {
+  memset(frame, 0, TEST_FRAME_CAPACITY);
+  set_ether_type(frame, ETHERNET_TYPE_IPV4_HIGH, ETHERNET_TYPE_IPV4_LOW);
+
+  /* Version 4, IHL 5 (20-byte header), total length 20, source 192.0.0.2. */
+  frame[ETHERNET_PAYLOAD_OFFSET] = IPV4_VERSION_AND_IHL;
+  write_big_endian_u16(frame + IPV4_TOTAL_LENGTH_OFFSET, IPV4_HEADER_SIZE);
+  frame[IPV4_SOURCE_ADDRESS_OFFSET] = 192;
+  frame[IPV4_SOURCE_LAST_OCTET_OFFSET] = 2;
+}
+
+static void test_ipv4_validation(void) {
+  uint8_t frame[TEST_FRAME_CAPACITY];
+  host_observation_t state = {0};
+  make_ipv4_frame(frame);
+
+  /* No prefix of the Ethernet and IPv4 headers is enough to learn an address.
+   */
+  for (size_t frame_len = 0; frame_len < 34; frame_len++) {
+    host_observe_frame(&state, frame, frame_len);
+    assert(!state.valid4);
+  }
+
+  host_observe_frame(&state, frame, 34);
+  assert(state.valid4 && state.ipv4[0] == 192 && state.ipv4[3] == 2);
+
+  /* Reject invalid IHL values and a total length larger than the received
+   * frame. */
+  state = (host_observation_t){0};
+  frame[ETHERNET_PAYLOAD_OFFSET] =
+      (IPV4_VERSION << IPV4_VERSION_SHIFT) | IPV4_SHORT_IHL_WORDS;
+  host_observe_frame(&state, frame, 34);
+  assert(!state.valid4);
+
+  frame[ETHERNET_PAYLOAD_OFFSET] =
+      (IPV4_VERSION << IPV4_VERSION_SHIFT) | IPV4_LONG_IHL_WORDS;
+  host_observe_frame(&state, frame, 34);
+  assert(!state.valid4);
+
+  frame[ETHERNET_PAYLOAD_OFFSET] = IPV4_VERSION_AND_IHL;
+  write_big_endian_u16(frame + IPV4_TOTAL_LENGTH_OFFSET, IPV4_HEADER_SIZE + 1);
+  host_observe_frame(&state, frame, 34);
+  assert(!state.valid4);
+}
+
+static void make_arp_frame(uint8_t frame[TEST_FRAME_CAPACITY]) {
+  memset(frame, 0, TEST_FRAME_CAPACITY);
+  set_ether_type(frame, ETHERNET_TYPE_ARP_HIGH, ETHERNET_TYPE_ARP_LOW);
+
+  /* Ethernet hardware, IPv4 protocol, 6/4-byte addresses, operation=request. */
+  write_big_endian_u16(frame + ARP_HARDWARE_TYPE_OFFSET,
+                       ARP_ETHERNET_HARDWARE_TYPE);
+  write_big_endian_u16(frame + ARP_PROTOCOL_TYPE_OFFSET,
+                       (ETHERNET_TYPE_IPV4_HIGH << 8) | ETHERNET_TYPE_IPV4_LOW);
+  frame[ARP_HARDWARE_LENGTH_OFFSET] = ARP_ETHERNET_ADDRESS_SIZE;
+  frame[ARP_PROTOCOL_LENGTH_OFFSET] = ARP_IPV4_ADDRESS_SIZE;
+  write_big_endian_u16(frame + ARP_OPERATION_OFFSET, ARP_REQUEST);
+  frame[ARP_SENDER_IPV4_OFFSET] = 10;
+}
+
+static void test_arp_validation(void) {
+  uint8_t frame[TEST_FRAME_CAPACITY];
+  host_observation_t state = {0};
+  make_arp_frame(frame);
+
+  host_observe_frame(&state, frame, ARP_FULL_FRAME_SIZE - 1);
+  assert(!state.valid4);
+
+  host_observe_frame(&state, frame, ARP_FULL_FRAME_SIZE);
+  assert(state.valid4 && state.ipv4[0] == 10);
+
+  state = (host_observation_t){0};
+  frame[ARP_HARDWARE_LENGTH_OFFSET] = 5;
+  host_observe_frame(&state, frame, ARP_FULL_FRAME_SIZE);
+  assert(!state.valid4);
+}
+
+static void test_ipv6_validation(void) {
+  uint8_t frame[TEST_FRAME_CAPACITY] = {0};
+  host_observation_t state = {0};
+  set_ether_type(frame, ETHERNET_TYPE_IPV6_HIGH, ETHERNET_TYPE_IPV6_LOW);
+  frame[ETHERNET_PAYLOAD_OFFSET] = IPV6_VERSION_FIELD;
+  frame[IPV6_SOURCE_ADDRESS_OFFSET] = IPV6_GLOBAL_UNICAST_FIRST_BYTE;
+
+  host_observe_frame(&state, frame, IPV6_FULL_FRAME_SIZE - 1);
+  assert(!state.valid6);
+
+  host_observe_frame(&state, frame, IPV6_FULL_FRAME_SIZE);
+  assert(state.valid6);
+
+  state = (host_observation_t){0};
+  write_big_endian_u16(frame + IPV6_PAYLOAD_LENGTH_OFFSET, 1);
+  host_observe_frame(&state, frame, IPV6_FULL_FRAME_SIZE);
+  assert(!state.valid6);
+
+  write_big_endian_u16(frame + IPV6_PAYLOAD_LENGTH_OFFSET, 0);
+  frame[IPV6_SOURCE_ADDRESS_OFFSET] = IPV6_LINK_LOCAL_FIRST_BYTE;
+  host_observe_frame(&state, frame, IPV6_FULL_FRAME_SIZE);
+  assert(!state.valid6);
+}
+
+static void test_deterministic_malformed_frame_corpus(void) {
+  uint8_t frame[TEST_FRAME_CAPACITY];
+  host_observation_t state = {0};
+  uint32_t random = 1;
+
+  /* Exercise short and malformed inputs with a repeatable pseudo-random corpus.
+   */
+  for (unsigned test_case = 0; test_case < 10000; test_case++) {
+    for (size_t byte = 0; byte < sizeof(frame); byte++) {
+      random = random * 1664525u + 1013904223u;
+      frame[byte] = (uint8_t)(random >> 24);
     }
-    puts("PASS: packet observation bounds, malformed headers, preserved IPv6 policy, 10000-input corpus");
+
+    host_observe_frame(&state, frame, test_case % sizeof(frame));
+  }
+}
+
+int main(void) {
+  test_ipv4_validation();
+  test_arp_validation();
+  test_ipv6_validation();
+  test_deterministic_malformed_frame_corpus();
+
+  puts("PASS: packet bounds, malformed headers, donor IPv6 policy, and "
+       "10000-input corpus");
 }
