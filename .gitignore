@@ -1,0 +1,8 @@
+build*/
+managed_components/
+sdkconfig
+sdkconfig.old
+.env*
+.venv/
+__pycache__/
+dist/
