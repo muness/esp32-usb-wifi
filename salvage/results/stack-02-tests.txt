@@ -1,2 +1,4 @@
 PASS: packet observation bounds, malformed headers, preserved IPv6 policy, 10000-input corpus
 Stack 02: native GCC ASan+UBSan PASS
+
+Historical note: this log records the pre-readability version of the candidate. Parser/test logic was reorganized and protocol offsets were named afterward; the current candidate has not yet had this host test rerun.
