@@ -30,6 +30,7 @@
 #include "tinyusb_net.h"
 
 #include "bridge.h"
+#include "host_observation.h"
 
 static const char *TAG = "USB_NCM";
 
@@ -117,35 +118,11 @@ void bridge_get_crash(bridge_crash_info_t *c)
 /* Host addresses, snooped passively from host -> Wi-Fi frames: the bridge
  * holds no IP, so this is the only way the console can report what address
  * the host obtained. */
-static volatile bool s_host_ip4_valid;
-static uint8_t s_host_ip4[4];
-static volatile bool s_host_ip6_valid;
-static uint8_t s_host_ip6[16];
+static host_observation_t s_host;
 
-/* Inspect a host -> Wi-Fi frame and record the source address it advertises.
- * Best-effort, untagged Ethernet only. */
-static void snoop_host_addr(const uint8_t *f, uint16_t len)
+static void snoop_host_addr(const uint8_t *frame, uint16_t len)
 {
-    if (len < 14) {
-        return;
-    }
-    uint16_t eth = (uint16_t)((f[12] << 8) | f[13]);
-    if (eth == 0x0806 && len >= 32) { /* ARP: sender protocol (IPv4) address at 28 */
-        if (f[28] | f[29] | f[30] | f[31]) {
-            memcpy(s_host_ip4, f + 28, 4);
-            s_host_ip4_valid = true;
-        }
-    } else if (eth == 0x0800 && len >= 30) { /* IPv4: source address at 26 */
-        if (f[26] | f[27] | f[28] | f[29]) {
-            memcpy(s_host_ip4, f + 26, 4);
-            s_host_ip4_valid = true;
-        }
-    } else if (eth == 0x86dd && len >= 38) { /* IPv6: source address at 22 */
-        if ((f[22] & 0xe0) == 0x20) { /* 2000::/3 global unicast only */
-            memcpy(s_host_ip6, f + 22, 16);
-            s_host_ip6_valid = true;
-        }
-    }
+    host_observe_frame(&s_host, frame, len);
 }
 
 static esp_err_t usb_recv_callback(void *buffer, uint16_t len, void *ctx)
@@ -280,19 +257,19 @@ bool bridge_wifi_connected(void)
 
 bool bridge_host_ipv4(uint8_t ip[4])
 {
-    if (!s_host_ip4_valid) {
+    if (!s_host.valid4) {
         return false;
     }
-    memcpy(ip, s_host_ip4, 4);
+    memcpy(ip, s_host.ipv4, 4);
     return true;
 }
 
 bool bridge_host_ipv6(uint8_t ip[16])
 {
-    if (!s_host_ip6_valid) {
+    if (!s_host.valid6) {
         return false;
     }
-    memcpy(ip, s_host_ip6, 16);
+    memcpy(ip, s_host.ipv6, 16);
     return true;
 }
 
