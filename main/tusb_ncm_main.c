@@ -28,6 +28,8 @@
 #include "tinyusb.h"
 #include "tinyusb_default_config.h"
 #include "tinyusb_net.h"
+#include "tusb.h"
+#include "device/dcd.h"
 
 #include "bridge.h"
 #include "host_observation.h"
@@ -119,18 +121,47 @@ void bridge_get_crash(bridge_crash_info_t *c)
  * holds no IP, so this is the only way the console can report what address
  * the host obtained. */
 static host_observation_t s_host;
+static portMUX_TYPE s_host_lock = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t s_host_epoch;
 
-static void snoop_host_addr(const uint8_t *frame, uint16_t len)
+static void clear_host_observation(void)
 {
-    host_observe_frame(&s_host, frame, len);
+    portENTER_CRITICAL(&s_host_lock);
+    host_observation_clear(&s_host);
+    s_host_epoch++;
+    portEXIT_CRITICAL(&s_host_lock);
+}
+
+void tud_event_hook_cb(uint8_t rhport, uint32_t eventid, bool in_isr)
+{
+    (void)rhport;
+    if (eventid != DCD_EVENT_BUS_RESET && eventid != DCD_EVENT_UNPLUGGED) return;
+    if (in_isr) portENTER_CRITICAL_ISR(&s_host_lock);
+    else portENTER_CRITICAL(&s_host_lock);
+    host_observation_clear(&s_host);
+    s_host_epoch++;
+    if (in_isr) portEXIT_CRITICAL_ISR(&s_host_lock);
+    else portEXIT_CRITICAL(&s_host_lock);
+}
+
+static void snoop_host_addr(const uint8_t *frame, uint16_t len, uint32_t epoch)
+{
+    portENTER_CRITICAL(&s_host_lock);
+    if (epoch == s_host_epoch && s_is_wifi_connected) {
+        host_observe_frame(&s_host, frame, len, esp_timer_get_time() / 1000);
+    }
+    portEXIT_CRITICAL(&s_host_lock);
 }
 
 static esp_err_t usb_recv_callback(void *buffer, uint16_t len, void *ctx)
 {
-    snoop_host_addr(buffer, len);
+    portENTER_CRITICAL(&s_host_lock);
+    const uint32_t epoch = s_host_epoch;
+    portEXIT_CRITICAL(&s_host_lock);
     if (s_is_wifi_connected) {
         if (esp_wifi_internal_tx(ESP_IF_WIFI_STA, buffer, len) == ESP_OK) {
             s_cnt_host_to_wifi++;
+            snoop_host_addr(buffer, len, epoch);
         } else {
             s_cnt_poolfail++; /* driver out of TX buffers; the host retries */
         }
@@ -190,12 +221,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             console_debug_printf("Wi-Fi link down (reason %d)", d->reason);
         }
         s_is_wifi_connected = false;
+        clear_host_observation();
         esp_wifi_internal_reg_rxcb(ESP_IF_WIFI_STA, NULL);
         if (s_ssid[0]) { /* paced re-join, unless unprovisioned */
             esp_timer_start_once(s_retry_timer, 5 * 1000 * 1000);
         }
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) {
         ESP_LOGI(TAG, "WiFi STA connected");
+        clear_host_observation();
         esp_wifi_internal_reg_rxcb(ESP_IF_WIFI_STA, pkt_wifi2usb);
         s_is_wifi_connected = true;
         s_last_disc_reason = 0;
@@ -257,24 +290,24 @@ bool bridge_wifi_connected(void)
 
 bool bridge_host_ipv4(uint8_t ip[4])
 {
-    if (!s_host.valid4) {
-        return false;
-    }
-    memcpy(ip, s_host.ipv4, 4);
-    return true;
+    portENTER_CRITICAL(&s_host_lock);
+    bool valid = host_observed_ipv4(&s_host, ip, esp_timer_get_time() / 1000);
+    portEXIT_CRITICAL(&s_host_lock);
+    return valid;
 }
 
 bool bridge_host_ipv6(uint8_t ip[16])
 {
-    if (!s_host.valid6) {
-        return false;
-    }
-    memcpy(ip, s_host.ipv6, 16);
-    return true;
+    portENTER_CRITICAL(&s_host_lock);
+    bool valid = host_observed_ipv6(&s_host, ip, esp_timer_get_time() / 1000);
+    portEXIT_CRITICAL(&s_host_lock);
+    return valid;
 }
 
 void wifi_apply_creds(const char *ssid, const char *pass)
 {
+    s_is_wifi_connected = false;
+    clear_host_observation();
     strlcpy(s_ssid, ssid, sizeof(s_ssid));
     strlcpy(s_pass, pass, sizeof(s_pass));
     esp_timer_stop(s_retry_timer); /* a pending retry would race the new config */

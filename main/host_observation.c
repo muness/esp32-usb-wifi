@@ -134,7 +134,7 @@ static bool is_nonzero_ipv4_address(const uint8_t address[4]) {
 }
 
 void host_observe_frame(host_observation_t *state, const uint8_t *frame,
-                        size_t frame_len) {
+                        size_t frame_len, uint64_t now_ms) {
   if (frame_len < ETHERNET_HEADER_SIZE) {
     return;
   }
@@ -154,11 +154,43 @@ void host_observe_frame(host_observation_t *state, const uint8_t *frame,
     if (ipv6_source != NULL) {
       memcpy(state->ipv6, ipv6_source, sizeof(state->ipv6));
       state->valid6 = true;
+      state->seen6_ms = now_ms;
     }
   }
 
   if (ipv4_source != NULL && is_nonzero_ipv4_address(ipv4_source)) {
     memcpy(state->ipv4, ipv4_source, sizeof(state->ipv4));
     state->valid4 = true;
+    state->seen4_ms = now_ms;
   }
+}
+
+void host_observation_clear(host_observation_t *state) {
+  memset(state, 0, sizeof(*state));
+}
+
+static bool observation_is_fresh(bool valid, uint64_t seen_ms,
+                                 uint64_t now_ms) {
+  return valid && now_ms >= seen_ms &&
+         now_ms - seen_ms < HOST_OBSERVATION_TTL_MS;
+}
+
+bool host_observed_ipv4(const host_observation_t *state, uint8_t ip[4],
+                        uint64_t now_ms) {
+  if (!observation_is_fresh(state->valid4, state->seen4_ms, now_ms)) {
+    return false;
+  }
+
+  memcpy(ip, state->ipv4, 4);
+  return true;
+}
+
+bool host_observed_ipv6(const host_observation_t *state, uint8_t ip[16],
+                        uint64_t now_ms) {
+  if (!observation_is_fresh(state->valid6, state->seen6_ms, now_ms)) {
+    return false;
+  }
+
+  memcpy(ip, state->ipv6, 16);
+  return true;
 }

@@ -38,7 +38,9 @@ void bridge_get_crash(bridge_crash_info_t *c);
 const char *cfg_country(void);
 
 /* Host addresses snooped passively from host -> Wi-Fi frames (the bridge holds
- * no IP of its own). Return false while nothing has been seen yet. */
+ * no IP of its own). Not evidence of DHCP success or Internet access.
+ * Observations expire after 60 seconds without a valid source frame and clear
+ * on association changes, credential changes, USB reset or unplug. */
 bool bridge_host_ipv4(uint8_t ip[4]);
 bool bridge_host_ipv6(uint8_t ip[16]);
 

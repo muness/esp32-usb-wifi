@@ -49,6 +49,11 @@ enum {
   IPV6_LINK_LOCAL_FIRST_BYTE = 0xfe,
 };
 
+static void observe_frame_at_test_time(host_observation_t *state,
+                                       const uint8_t *frame, size_t frame_len) {
+  host_observe_frame(state, frame, frame_len, 1000);
+}
+
 static void write_big_endian_u16(uint8_t *bytes, uint16_t value) {
   bytes[0] = (uint8_t)(value >> 8);
   bytes[1] = (uint8_t)value;
@@ -79,11 +84,11 @@ static void test_ipv4_validation(void) {
   /* No prefix of the Ethernet and IPv4 headers is enough to learn an address.
    */
   for (size_t frame_len = 0; frame_len < 34; frame_len++) {
-    host_observe_frame(&state, frame, frame_len);
+    observe_frame_at_test_time(&state, frame, frame_len);
     assert(!state.valid4);
   }
 
-  host_observe_frame(&state, frame, 34);
+  observe_frame_at_test_time(&state, frame, 34);
   assert(state.valid4 && state.ipv4[0] == 192 && state.ipv4[3] == 2);
 
   /* Reject invalid IHL values and a total length larger than the received
@@ -91,17 +96,17 @@ static void test_ipv4_validation(void) {
   state = (host_observation_t){0};
   frame[ETHERNET_PAYLOAD_OFFSET] =
       (IPV4_VERSION << IPV4_VERSION_SHIFT) | IPV4_SHORT_IHL_WORDS;
-  host_observe_frame(&state, frame, 34);
+  observe_frame_at_test_time(&state, frame, 34);
   assert(!state.valid4);
 
   frame[ETHERNET_PAYLOAD_OFFSET] =
       (IPV4_VERSION << IPV4_VERSION_SHIFT) | IPV4_LONG_IHL_WORDS;
-  host_observe_frame(&state, frame, 34);
+  observe_frame_at_test_time(&state, frame, 34);
   assert(!state.valid4);
 
   frame[ETHERNET_PAYLOAD_OFFSET] = IPV4_VERSION_AND_IHL;
   write_big_endian_u16(frame + IPV4_TOTAL_LENGTH_OFFSET, IPV4_HEADER_SIZE + 1);
-  host_observe_frame(&state, frame, 34);
+  observe_frame_at_test_time(&state, frame, 34);
   assert(!state.valid4);
 }
 
@@ -125,15 +130,15 @@ static void test_arp_validation(void) {
   host_observation_t state = {0};
   make_arp_frame(frame);
 
-  host_observe_frame(&state, frame, ARP_FULL_FRAME_SIZE - 1);
+  observe_frame_at_test_time(&state, frame, ARP_FULL_FRAME_SIZE - 1);
   assert(!state.valid4);
 
-  host_observe_frame(&state, frame, ARP_FULL_FRAME_SIZE);
+  observe_frame_at_test_time(&state, frame, ARP_FULL_FRAME_SIZE);
   assert(state.valid4 && state.ipv4[0] == 10);
 
   state = (host_observation_t){0};
   frame[ARP_HARDWARE_LENGTH_OFFSET] = 5;
-  host_observe_frame(&state, frame, ARP_FULL_FRAME_SIZE);
+  observe_frame_at_test_time(&state, frame, ARP_FULL_FRAME_SIZE);
   assert(!state.valid4);
 }
 
@@ -144,20 +149,20 @@ static void test_ipv6_validation(void) {
   frame[ETHERNET_PAYLOAD_OFFSET] = IPV6_VERSION_FIELD;
   frame[IPV6_SOURCE_ADDRESS_OFFSET] = IPV6_GLOBAL_UNICAST_FIRST_BYTE;
 
-  host_observe_frame(&state, frame, IPV6_FULL_FRAME_SIZE - 1);
+  observe_frame_at_test_time(&state, frame, IPV6_FULL_FRAME_SIZE - 1);
   assert(!state.valid6);
 
-  host_observe_frame(&state, frame, IPV6_FULL_FRAME_SIZE);
+  observe_frame_at_test_time(&state, frame, IPV6_FULL_FRAME_SIZE);
   assert(state.valid6);
 
   state = (host_observation_t){0};
   write_big_endian_u16(frame + IPV6_PAYLOAD_LENGTH_OFFSET, 1);
-  host_observe_frame(&state, frame, IPV6_FULL_FRAME_SIZE);
+  observe_frame_at_test_time(&state, frame, IPV6_FULL_FRAME_SIZE);
   assert(!state.valid6);
 
   write_big_endian_u16(frame + IPV6_PAYLOAD_LENGTH_OFFSET, 0);
   frame[IPV6_SOURCE_ADDRESS_OFFSET] = IPV6_LINK_LOCAL_FIRST_BYTE;
-  host_observe_frame(&state, frame, IPV6_FULL_FRAME_SIZE);
+  observe_frame_at_test_time(&state, frame, IPV6_FULL_FRAME_SIZE);
   assert(!state.valid6);
 }
 
@@ -174,8 +179,25 @@ static void test_deterministic_malformed_frame_corpus(void) {
       frame[byte] = (uint8_t)(random >> 24);
     }
 
-    host_observe_frame(&state, frame, test_case % sizeof(frame));
+    observe_frame_at_test_time(&state, frame, test_case % sizeof(frame));
   }
+}
+
+static void test_observation_expiry_and_clear(void) {
+  host_observation_t state = {.valid4 = true, .seen4_ms = 1000};
+  uint8_t address[16] = {0};
+
+  assert(host_observed_ipv4(&state, address, 60999));
+  assert(!host_observed_ipv4(&state, address, 61000));
+  assert(!host_observed_ipv4(&state, address, 999));
+
+  state.valid6 = true;
+  state.seen6_ms = 1000;
+  assert(host_observed_ipv6(&state, address, 1001));
+
+  host_observation_clear(&state);
+  assert(!host_observed_ipv4(&state, address, 1001));
+  assert(!host_observed_ipv6(&state, address, 1001));
 }
 
 int main(void) {
@@ -183,6 +205,7 @@ int main(void) {
   test_arp_validation();
   test_ipv6_validation();
   test_deterministic_malformed_frame_corpus();
+  test_observation_expiry_and_clear();
 
   puts("PASS: packet bounds, malformed headers, donor IPv6 policy, and "
        "10000-input corpus");
