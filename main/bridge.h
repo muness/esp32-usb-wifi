@@ -7,6 +7,8 @@
 #include <stdint.h>
 
 typedef struct {
+    uint64_t upload_bytes;   /* accepted Ethernet bytes: host -> Wi-Fi */
+    uint64_t download_bytes; /* accepted Ethernet bytes: Wi-Fi -> host */
     uint32_t host_to_wifi;  /* frames forwarded host -> Wi-Fi */
     uint32_t wifi_to_host;  /* frames forwarded Wi-Fi -> host */
     uint32_t txdrop;        /* host -> Wi-Fi dropped (not associated) */
@@ -15,7 +17,12 @@ typedef struct {
     uint32_t rxdrop;        /* Wi-Fi -> host dropped (USB NTB backpressure) */
 } bridge_stats_t;
 
+/* Coherent snapshot, including 64-bit fields on 32-bit ESP targets.
+ * Byte totals are per boot, not proof of receipt or Internet reachability. */
 void bridge_get_stats(bridge_stats_t *s);
+typedef enum { BRIDGE_DROP_TX, BRIDGE_DROP_REFLECTED, BRIDGE_DROP_POOL, BRIDGE_DROP_RX } bridge_drop_t;
+void bridge_count_frame(bool to_wifi, uint16_t len);
+void bridge_count_drop(bridge_drop_t kind);
 void bridge_get_mac(uint8_t mac[6]);
 bool bridge_wifi_connected(void);
 

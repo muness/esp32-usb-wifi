@@ -1,4 +1,4 @@
-idf_component_register(SRCS "tusb_ncm_main.c" "console.c" "led.c" "host_observation.c"
+idf_component_register(SRCS "tusb_ncm_main.c" "console.c" "led.c" "host_observation.c" "bridge_stats.c"
                        INCLUDE_DIRS ""
                        PRIV_REQUIRES esp_wifi nvs_flash esp_timer
                        )

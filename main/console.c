@@ -11,6 +11,7 @@
  * bridge tolerates. */
 
 #include <ctype.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -319,6 +320,9 @@ static void show_state(void)
                (unsigned long)st.host_to_wifi, (unsigned long)st.wifi_to_host,
                (unsigned long)st.txdrop, (unsigned long)st.rxdrop,
                (unsigned long)st.reflected, (unsigned long)st.poolfail);
+
+    con_printf("    bytes:     download=%" PRIu64 " upload=%" PRIu64 " (accepted, since boot)\r\n",
+               st.download_bytes, st.upload_bytes);
 
     bridge_crash_info_t ci;
     bridge_get_crash(&ci);

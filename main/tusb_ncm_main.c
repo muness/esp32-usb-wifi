@@ -48,15 +48,6 @@ static uint8_t s_mac[6];      /* station MAC; the host's NCM interface adopts it
 static char s_ssid[33];       /* active credentials (console may replace them) */
 static char s_pass[65];
 
-/* Bridged-frame counters (32-bit aligned writes are atomic on Xtensa; the
- * console only reads them for display). */
-static volatile uint32_t s_cnt_host_to_wifi;
-static volatile uint32_t s_cnt_wifi_to_host;
-static volatile uint32_t s_cnt_txdrop;
-static volatile uint32_t s_cnt_reflected;
-static volatile uint32_t s_cnt_poolfail;
-static volatile uint32_t s_cnt_rxdrop;
-
 static uint8_t s_last_disc_reason;    /* wifi_err_reason_t of the last disconnect */
 static esp_timer_handle_t s_retry_timer; /* paced re-join, instead of a tight loop */
 
@@ -78,12 +69,14 @@ static esp_timer_handle_t s_snapshot_timer;
 
 static void snapshot_timer_cb(void *arg)
 {
-    s_crashlog.host_to_wifi = s_cnt_host_to_wifi;
-    s_crashlog.wifi_to_host = s_cnt_wifi_to_host;
-    s_crashlog.txdrop = s_cnt_txdrop;
-    s_crashlog.reflected = s_cnt_reflected;
-    s_crashlog.poolfail = s_cnt_poolfail;
-    s_crashlog.rxdrop = s_cnt_rxdrop;
+    bridge_stats_t stats;
+    bridge_get_stats(&stats);
+    s_crashlog.host_to_wifi = stats.host_to_wifi;
+    s_crashlog.wifi_to_host = stats.wifi_to_host;
+    s_crashlog.txdrop = stats.txdrop;
+    s_crashlog.reflected = stats.reflected;
+    s_crashlog.poolfail = stats.poolfail;
+    s_crashlog.rxdrop = stats.rxdrop;
 }
 
 static void crashlog_boot(void)
@@ -183,13 +176,13 @@ static esp_err_t usb_recv_callback(void *buffer, uint16_t len, void *ctx)
     portEXIT_CRITICAL(&s_host_lock);
     if (s_is_wifi_connected) {
         if (esp_wifi_internal_tx(ESP_IF_WIFI_STA, buffer, len) == ESP_OK) {
-            s_cnt_host_to_wifi++;
+            bridge_count_frame(true, len);
             snoop_host_addr(buffer, len, epoch);
         } else {
-            s_cnt_poolfail++; /* driver out of TX buffers; the host retries */
+            bridge_count_drop(BRIDGE_DROP_POOL); /* driver out of TX buffers; the host retries */
         }
     } else {
-        s_cnt_txdrop++; /* not associated; the host retries */
+        bridge_count_drop(BRIDGE_DROP_TX); /* not associated; the host retries */
     }
     return ESP_OK;
 }
@@ -206,7 +199,7 @@ static esp_err_t pkt_wifi2usb(void *buffer, uint16_t len, void *eb)
      * station's frames back to it (prevents IPv6 DAD / IPv4 ACD false
      * positives and mDNS self-answers). */
     if (len >= 12 && memcmp((const uint8_t *)buffer + 6, s_mac, 6) == 0) {
-        s_cnt_reflected++;
+        bridge_count_drop(BRIDGE_DROP_REFLECTED);
         esp_wifi_internal_free_rx_buffer(eb);
         return ESP_OK;
     }
@@ -218,10 +211,10 @@ static esp_err_t pkt_wifi2usb(void *buffer, uint16_t len, void *eb)
         err = tinyusb_net_send_sync(buffer, len, eb, pdMS_TO_TICKS(50));
     }
     if (err != ESP_OK) {
-        s_cnt_rxdrop++;
+        bridge_count_drop(BRIDGE_DROP_RX);
         esp_wifi_internal_free_rx_buffer(eb);
     } else {
-        s_cnt_wifi_to_host++;
+        bridge_count_frame(false, len);
     }
     return ESP_OK;
 }
@@ -274,16 +267,6 @@ static void wifi_set_config_from_creds(void)
 }
 
 /* --- interface for the console (bridge.h) ------------------------------- */
-
-void bridge_get_stats(bridge_stats_t *s)
-{
-    s->host_to_wifi = s_cnt_host_to_wifi;
-    s->wifi_to_host = s_cnt_wifi_to_host;
-    s->txdrop = s_cnt_txdrop;
-    s->reflected = s_cnt_reflected;
-    s->poolfail = s_cnt_poolfail;
-    s->rxdrop = s_cnt_rxdrop;
-}
 
 const char *bridge_link_status(void)
 {
