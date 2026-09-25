@@ -1,0 +1,22 @@
+[870/876] No install step for 'bootloader'
+[871/876] Completed 'bootloader'
+[872/876] Generating esp-idf/esp_system/ld/sections.ld
+[873/876] Building C object CMakeFiles/esp32-usb-eth.elf.dir/project_elf_src_esp32s3.c.obj
+[874/876] Linking CXX executable esp32-usb-eth.elf
+[875/876] Generating binary image from built executable
+esptool.py v4.12.0
+Creating esp32s3 image...
+Merged 2 ELF sections
+Successfully created esp32s3 image.
+Generated /tmp/tdongle-stack-03/build/esp32-usb-eth.bin
+[876/876] cd /tmp/tdongle-stack-03/build/esp-idf/esptool_py && /tmp/tdongle-python/bin/python /tmp/tdongle-audit/esp-idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /tmp/tdongle-stack-03/build/partition_table/partition-table.bin /tmp/tdongle-stack-03/build/esp32-usb-eth.bin
+esp32-usb-eth.bin binary size 0xb6130 bytes. Smallest app partition is 0x100000 bytes. 0x49ed0 bytes (29%) free.
+
+Project build complete. To flash, run:
+ idf.py flash
+or
+ idf.py -p PORT flash
+or
+ python -m esptool --chip esp32s3 -b 460800 --before default_reset --after hard_reset write_flash --flash_mode dio --flash_size 2MB --flash_freq 80m 0x0 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0x10000 build/esp32-usb-eth.bin
+or from the "/tmp/tdongle-stack-03/build" directory
+ python -m esptool --chip esp32s3 -b 460800 --before default_reset --after hard_reset write_flash "@flash_args"

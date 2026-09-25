@@ -1,0 +1,3 @@
+PASS: packet observation bounds, malformed headers, preserved IPv6 policy, 10000-input corpus
+PASS: production stats module, concurrent snapshots, 64-bit totals and per-cause drops
+Stack 03: native GCC ASan+UBSan PASS

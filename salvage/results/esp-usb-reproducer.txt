@@ -1,0 +1,2 @@
+Upstream: expected assertion failure at deadline/copy race reproduced
+Patched: PASS (copy, cancellation, deadline/copy race, backpressure, recovery)
