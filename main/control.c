@@ -218,9 +218,12 @@ static void handle(char *line) {
         wifi_ap_record_t *aps = calloc(20, sizeof(*aps));
         uint16_t n = 20;
         if (aps && esp_wifi_scan_get_ap_records(&n, aps) == ESP_OK)
-            for (i = 0; i < n; i++)
-                console_printf("ssid=%.32s rssi=%d auth=%d\r\n", aps[i].ssid, aps[i].rssi,
-                               aps[i].authmode);
+            for (i = 0; i < n; i++) {
+                char raw[33] = {0}, safe[33];
+                memcpy(raw, aps[i].ssid, 32);
+                text_clip(safe, sizeof(safe), raw, 32);
+                console_printf("ssid=%s rssi=%d auth=%d\r\n", safe, aps[i].rssi, aps[i].authmode);
+            }
         else
             esp_wifi_clear_ap_list();
         free(aps);

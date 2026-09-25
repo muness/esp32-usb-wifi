@@ -178,6 +178,9 @@ static void layout(void) {
     char offline[5][32];
     view_lines(&v, offline);
     assert(strstr(offline[0], "RSSI --"));
+    char safe[32];
+    text_clip(safe, sizeof(safe), "bad\x1b[2J", 26);
+    assert(!strcmp(safe, "bad?[2J"));
     char out[5];
     text_clip(out, sizeof(out), "abcdef", 26);
     assert(!strcmp(out, "a..."));
