@@ -13,6 +13,6 @@ test_permission_denied (test_tools.Tools.test_permission_denied) ... ok
 test_read_only (test_tools.Tools.test_read_only) ... ok
 
 ----------------------------------------------------------------------
-Ran 8 tests in 0.007s
+Ran 8 tests in 0.006s
 
 OK

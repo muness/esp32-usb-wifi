@@ -1,8 +1,8 @@
 {
   "full": {
     "compiled": true,
-    "app_bytes": 1186688,
-    "app_sha256": "ae8b2f0fb8d0a93f8dd487524a991bf6d42002961167b9a458731e44a885a7dd",
+    "app_bytes": 1186880,
+    "app_sha256": "1ce493876c13d2e56cb9a3d6bd2c43d34dd95bd1fd69cf7b9f7537393ca41a74",
     "descriptors": {
       "compiled_descriptors": "PASS",
       "variant": "full",
@@ -73,18 +73,18 @@
       "used_diram": 187515,
       "used_diram_ratio": 0.5486745084269663,
       "diram_remain": 154245,
-      "flash_code": 900500,
-      "flash_rodata": 150456,
+      "flash_code": 900668,
+      "flash_rodata": 150472,
       "flash_other": 256,
-      "used_flash_non_ram": 1051212,
-      "total_size": 1186543
+      "used_flash_non_ram": 1051396,
+      "total_size": 1186727
     },
     "hardware_tested": false
   },
   "headless": {
     "compiled": true,
-    "app_bytes": 883920,
-    "app_sha256": "e4e1aab58e4555776dd6570d7ba6ec4fbe03a17431306073da3ff9923d5339c1",
+    "app_bytes": 884064,
+    "app_sha256": "0490dbacbd0a62fc292b2a3cbd698fce4c5908e8b960f45f3303246ee5f96b54",
     "descriptors": {
       "compiled_descriptors": "PASS",
       "variant": "headless",
@@ -155,18 +155,18 @@
       "used_diram": 144491,
       "used_diram_ratio": 0.42278499531835206,
       "diram_remain": 197269,
-      "flash_code": 634336,
-      "flash_rodata": 123336,
+      "flash_code": 634460,
+      "flash_rodata": 123352,
       "flash_other": 256,
-      "used_flash_non_ram": 757928,
-      "total_size": 883771
+      "used_flash_non_ram": 758068,
+      "total_size": 883911
     },
     "hardware_tested": false
   },
   "network-only": {
     "compiled": true,
-    "app_bytes": 1178416,
-    "app_sha256": "976039b8051041a0c4c8711d079b4d569da4f1e8689be8fc8dd9f14a44407cb8",
+    "app_bytes": 1178608,
+    "app_sha256": "e63c3075e71835e8b62b3214b1f7ab2ea2ff263cf56cc40688e9303618640718",
     "descriptors": {
       "compiled_descriptors": "PASS",
       "variant": "network-only",
@@ -223,11 +223,11 @@
       "used_diram": 184683,
       "used_diram_ratio": 0.5403879915730337,
       "diram_remain": 157077,
-      "flash_code": 894948,
-      "flash_rodata": 148776,
+      "flash_code": 895108,
+      "flash_rodata": 148808,
       "flash_other": 256,
-      "used_flash_non_ram": 1043980,
-      "total_size": 1178271
+      "used_flash_non_ram": 1044172,
+      "total_size": 1178463
     },
     "hardware_tested": false
   }

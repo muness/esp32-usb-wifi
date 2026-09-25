@@ -2,7 +2,7 @@
 
 **Implemented**, **compiled**, **host-unit-tested**. **Not tested on T-Dongle hardware, macOS USB networking or TeslaAndroid.** No target was flashed; no Pi network configuration changed. This is a development release for physical validation, not an accepted replacement for the working PIX-LINK yet.
 
-Firmware sources built from `e647b51` (subsequent changes are tests, documentation, license retention and packaging). The final generated package manifest records the repository commit and dirty flag. Build environment: Linux x86_64; ESP-IDF v5.5.1 exact commit in SOURCE_AUDIT; Xtensa GCC 14.2.0 `esp-14.2.0_20241119`; Python 3.12.3; host tests GCC 13.3.0. No system package installation or root was needed; local tools were installed in user space.
+Firmware sources built from `61eda53` (subsequent changes are tests, documentation, license retention and packaging). The final generated package manifest records the repository commit and dirty flag. Build environment: Linux x86_64; ESP-IDF v5.5.1 exact commit in SOURCE_AUDIT; Xtensa GCC 14.2.0 `esp-14.2.0_20241119`; Python 3.12.3; host tests GCC 13.3.0. No system package installation or root was needed; local tools were installed in user space.
 
 ## Actual build results
 
@@ -10,9 +10,9 @@ All commands exited successfully; final firmware builds had no compiler warnings
 
 | Command | App size | USB descriptors read from linked ELF |
 |---|---:|---|
-| `tools/build.sh full` | 1,186,688 bytes | VID:PID `303a:4001`; CDC-ACM control/data + NCM control/data (alternate 0/1); 500 mA |
-| `tools/build.sh headless` | 883,920 bytes | Same classes/VID/PID; LCD/LED disabled |
-| `tools/build.sh network-only` | 1,178,416 bytes | `303a:4000`; NCM only, no ACM; 500 mA |
+| `tools/build.sh full` | 1,186,880 bytes | VID:PID `303a:4001`; CDC-ACM control/data + NCM control/data (alternate 0/1); 500 mA |
+| `tools/build.sh headless` | 884,064 bytes | Same classes/VID/PID; LCD/LED disabled |
+| `tools/build.sh network-only` | 1,178,608 bytes | `303a:4000`; NCM only, no ACM; 500 mA |
 
 Each artifact has a 16 MB ESP32-S3 configuration, PSRAM disabled, NCM enabled, custom 4 MiB app partition and reproducible-build mode. Bootloader and partition images were generated. Checking linked descriptors is **not physical enumeration testing**.
 
@@ -21,9 +21,9 @@ A separate fresh local Git clone, with no build directory or managed components,
 Application SHA256:
 
 ```
-full          ae8b2f0fb8d0a93f8dd487524a991bf6d42002961167b9a458731e44a885a7dd
-headless      e4e1aab58e4555776dd6570d7ba6ec4fbe03a17431306073da3ff9923d5339c1
-network-only  976039b8051041a0c4c8711d079b4d569da4f1e8689be8fc8dd9f14a44407cb8
+full          1ce493876c13d2e56cb9a3d6bd2c43d34dd95bd1fd69cf7b9f7537393ca41a74
+headless      0490dbacbd0a62fc292b2a3cbd698fce4c5908e8b960f45f3303246ee5f96b54
+network-only  e63c3075e71835e8b62b3214b1f7ab2ea2ff263cf56cc40688e9303618640718
 ```
 
 Versioned packages are generated in `dist/tdongle-0.1.0-{full,headless,network-only}/` and matching `.tar.gz` files. Internal `SHA256SUMS` covers all package files; adjacent `.sha256` covers each archive. Effective sdkconfig, ELF, source lock, license notices and exact flash offsets are included. No auto-flash step exists. Machine-readable results: [builds.json](results/builds.json).
@@ -32,7 +32,7 @@ Versioned packages are generated in `dist/tdongle-0.1.0-{full,headless,network-o
 
 `TEST_CFLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' tools/test.sh`, with GCC 13.3.0 and pinned IDF_PATH: **PASS**. Four C test executables, eight Python unittest cases, and five synthetic layout previews. ASan/UBSan symbols were verified in all four test executables. The script now includes an ASan compiler/runtime probe so unsupported sanitizer flags cannot silently produce a claimed pass.
 
-- Portable core: 100,000 deterministic arbitrary/short frame inputs plus explicit IPv4/ARP/IPv6 boundary cases; reflection filter; address TTL/clock regression; large counter/rate math and counter reset; preferred/priority/exhausted selection; bounded backoff; candidate validation deadline; button bounce, hold one-shot and wake suppression; clipped UI text and truthful Internet label.
+- Portable core: 100,000 deterministic arbitrary/short frame inputs plus explicit IPv4/ARP/IPv6 boundary cases; reflection filter; address TTL/clock regression; large counter/rate math and counter reset; preferred/priority/exhausted selection; bounded backoff; candidate validation deadline and association-epoch changes between polls; button bounce, hold one-shot and wake suppression; clipped UI text, unknown RSSI, terminal escape sanitization and truthful Internet label.
 - Actual vendored `tinyusb_net.c` body compiled against a deterministic FreeRTOS/USB scheduler: successful copy, cancellation before copy, timeout racing completed copy, backpressure and subsequent recovery. Verifies exactly-once release behavior at the known donor-wrapper failure boundary. It is not a real USB controller stress test.
 - Actual `settings.c` against a mock NVS transaction contract: default settings, commit failure preserves old blob, candidate consumption, reboot-during-trial preservation, unknown schema rejection and explicit reset. Real flash power-cut integrity remains pending.
 - Shared browser/serial JSON parser with IDF's pinned cJSON source: malformed/non-object input, duplicate/unknown fields, escaped NUL, fractional index, control characters, short passwords and trailing content rejected; valid profile accepted.
