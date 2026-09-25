@@ -27,11 +27,11 @@ Each branch is one commit above the previous branch. Review each against its imm
 
 | Branch | Commit | Parent | Candidate |
 |---|---|---|---|
-| `stack/01-observation-validation` | `1c67f99` | `main` | Validate complete ARP/IPv4/IPv6 headers before learning addresses; portable parser and malformed-packet tests |
-| `stack/02-observation-lifecycle` | `20a108a` | stack/01 | Expire observations after 60 seconds; clear on Wi-Fi/USB/network transitions; reject stale in-flight observations using epochs |
-| `stack/03-coherent-byte-counters` | `22a15ad` | stack/02 | Locked snapshots of frame/drop/64-bit byte counters and console output; concurrent host tests |
+| `stack/01-observation-validation` | `6df37c5` | `main` | Validate complete ARP/IPv4/IPv6 headers before learning addresses; portable parser and malformed-packet tests |
+| `stack/02-observation-lifecycle` | `4cabb63` | stack/01 | Expire observations after 60 seconds; clear on Wi-Fi/USB/network transitions; reject stale in-flight observations using epochs |
+| `stack/03-coherent-byte-counters` | `b2547bb` | stack/02 | Locked snapshots of frame/drop/64-bit byte counters and console output; concurrent host tests |
 
-The 60-second observation lifetime is an explicit policy choice for maintainer review. The parser preserves the donor's global IPv6 2000::/3 scope; it does not claim new link-local/multicast forwarding capabilities. Static hosts can populate observations without DHCP. Byte counters are per boot; the existing warm-reset RTC record format remains unchanged. Counters measure successful send acceptance, not confirmed delivery at the remote endpoint.
+The parser names the Ethernet/IP/ARP field offsets and protocol values, and comments explain the length and version checks; its tests use named frame fields and readable fixture helpers. The branch stack has been restacked after that readability pass. CI will rerun the host tests and all firmware variants against the updated commit. The 60-second observation lifetime is an explicit policy choice for maintainer review. The parser preserves the donor's global IPv6 2000::/3 scope; it does not claim new link-local/multicast forwarding capabilities. Static hosts can populate observations without DHCP. Byte counters are per boot; the existing warm-reset RTC record format remains unchanged. Counters measure successful send acceptance, not confirmed delivery at the remote endpoint.
 
 Hardware checks remain necessary for reset/disconnect races, USB callback context and sustained traffic. The observation epoch does not purport to repair every pre-existing Wi-Fi lifecycle concurrency issue.
 
