@@ -71,6 +71,7 @@ static void snapshot_timer_cb(void *arg)
 {
     bridge_stats_t stats;
     bridge_get_stats(&stats);
+    /* Keep the historical 32-bit warm-reset record layout unchanged. */
     s_crashlog.host_to_wifi = stats.host_to_wifi;
     s_crashlog.wifi_to_host = stats.wifi_to_host;
     s_crashlog.txdrop = stats.txdrop;
@@ -176,13 +177,13 @@ static esp_err_t usb_recv_callback(void *buffer, uint16_t len, void *ctx)
     portEXIT_CRITICAL(&s_host_lock);
     if (s_is_wifi_connected) {
         if (esp_wifi_internal_tx(ESP_IF_WIFI_STA, buffer, len) == ESP_OK) {
-            bridge_count_frame(true, len);
+            bridge_count_frame(BRIDGE_TO_WIFI, len);
             snoop_host_addr(buffer, len, epoch);
         } else {
-            bridge_count_drop(BRIDGE_DROP_POOL); /* driver out of TX buffers; the host retries */
+            bridge_count_drop(BRIDGE_DROP_POOL); /* Driver buffers are full; host retries. */
         }
     } else {
-        bridge_count_drop(BRIDGE_DROP_TX); /* not associated; the host retries */
+        bridge_count_drop(BRIDGE_DROP_TX); /* Not associated; host retries. */
     }
     return ESP_OK;
 }
@@ -214,7 +215,7 @@ static esp_err_t pkt_wifi2usb(void *buffer, uint16_t len, void *eb)
         bridge_count_drop(BRIDGE_DROP_RX);
         esp_wifi_internal_free_rx_buffer(eb);
     } else {
-        bridge_count_frame(false, len);
+        bridge_count_frame(BRIDGE_TO_HOST, len);
     }
     return ESP_OK;
 }
